@@ -1,4 +1,4 @@
-// app/auth/ccallback/route.ts
+// app/auth/callback/route.ts
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
@@ -67,7 +67,9 @@ export async function GET(req: Request) {
 
     // 2) Fetch Microsoft profile
     const profileRes = await fetch("https://graph.microsoft.com/v1.0/me", {
-      headers: { Authorization: `Bearer ${accessToken}` }, });
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
     const profile = await profileRes.json();
 
     const email: string | undefined =
@@ -105,16 +107,27 @@ export async function GET(req: Request) {
     const userId = userRow.id;
 
     // 5) Store Microsoft tokens in DB
-    await supabase.from("user_connections").upsert(
-      {
-        user_id: userId,
-        provider: "microsoft",
-        access_token: accessToken,
-        refresh_token: refreshToken,
-        expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
-      },
-      { onConflict: "user_id,provider" }
-    );
+    console.log("🔵🔵 DEBUG — ENTERING TOKEN UPSERT STEP 🔵🔵");
+    console.log("🔵 userRow:", userRow);
+    console.log("🔵 userRow.id:", userRow?.id);
+    console.log("🔵 incoming userId variable:", userId);
+
+    const { error: connErr } = await supabase
+      .from("user_connections")
+      .upsert(
+        {
+          user_id: userId,
+          provider: "microsoft",
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          expires_at: new Date(
+            Date.now() + expiresIn * 1000
+          ).toISOString(),
+        },
+        { onConflict: "user_id,provider" }
+      );
+
+    console.log("🔴 token upsert result error:", connErr);
 
     // 6) Create portal session
     const sessionToken = crypto.randomUUID();
