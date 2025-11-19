@@ -7,11 +7,9 @@ export async function GET(req: Request) {
 
   if (!code) {
     return new Response("No code provided", { status: 400 });
-  }
+    }
 
-  // -----------------------------
-  // ✅ Required Environment Vars
-  // -----------------------------
+  // Env vars
   const clientId = process.env.AZURE_CLIENT_ID;
   const clientSecret = process.env.AZURE_CLIENT_SECRET;
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
@@ -19,15 +17,13 @@ export async function GET(req: Request) {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!clientId || !clientSecret || !siteUrl || !supabaseUrl || !serviceKey) {
-    console.error("❌ Missing environment variables");
+    console.error("Missing env vars");
     return new Response("Server configuration error", { status: 500 });
   }
 
   const redirectUri = `${siteUrl}/auth/callback`;
 
-  // -----------------------------
-  // 1️⃣ Exchange code → Tokens
-  // -----------------------------
+  // 1️⃣ Exchange CODE → TOKENS
   const tokenRes = await fetch(
     "https://login.microsoftonline.com/common/oauth2/v2.0/token",
     {
@@ -46,7 +42,7 @@ export async function GET(req: Request) {
   const tokenJson = await tokenRes.json();
 
   if (!tokenRes.ok) {
-    console.error("❌ Token exchange failed:", tokenJson);
+    console.error("Token exchange failed:", tokenJson);
     return new Response("Token exchange failed", { status: 400 });
   }
 
@@ -54,76 +50,79 @@ export async function GET(req: Request) {
   const refresh_token = tokenJson.refresh_token;
   const expires_in = tokenJson.expires_in;
 
-  // -----------------------------
-  // 2️⃣ Fetch Microsoft Profile
-  // -----------------------------
+  // 2️⃣ Get Microsoft user profile
   const profileRes = await fetch("https://graph.microsoft.com/v1.0/me", {
     headers: { Authorization: `Bearer ${access_token}` },
   });
 
   const profile = await profileRes.json();
 
-  if (!profile || !profile.id) {
-    console.error("❌ Failed to fetch Microsoft profile:", profile);
+  if (!profile.id || !profile.mail) {
+    console.error("Microsoft profile error:", profile);
     return new Response("Microsoft profile error", { status: 400 });
   }
 
-  // Extract usable email
-  const email = profile.mail || profile.userPrincipalName;
-  if (!email) {
-    console.error("❌ Microsoft returned no email:", profile);
-    return new Response("Email missing from Microsoft", { status: 400 });
-  }
+  const supabase = createClient(supabaseUrl, serviceKey);
 
-  // -----------------------------
-  // 3️⃣ Ensure Supabase User Exists
-  // -----------------------------
-  const supabaseAdmin = createClient(supabaseUrl, serviceKey);
+  // 3️⃣ Ensure Supabase Auth user exists
+  const authUserEmail = profile.mail.toLowerCase();
 
-  // Try to find existing supabase user
-  let { data: existingUser } = await supabaseAdmin
+  let { data: existingUser } = await supabase
     .from("auth.users")
-    .select("id")
-    .eq("email", email)
+    .select("*")
+    .eq("email", authUserEmail)
     .maybeSingle();
 
-  // If not found, create user
   if (!existingUser) {
-    const newUser = await supabaseAdmin.auth.admin.createUser({
-      email,
-      email_confirm: true,
-    });
+    // Create user via service key
+    const { data: createdUser, error: createErr } =
+      await supabase.auth.admin.createUser({
+        email: authUserEmail,
+        email_confirm: true,
+      });
 
-    if (newUser.error) {
-      console.error("❌ Failed to create Supabase user:", newUser.error);
-      return new Response("User creation failed", { status: 500 });
+    if (createErr) {
+      console.error("User creation failed:", createErr);
+      return new Response("User creation failed.", { status: 500 });
     }
 
-    existingUser = newUser.data.user;
+    existingUser = createdUser.user;
   }
 
-  const supabaseUserId = existingUser.id;
-
-  // -----------------------------
-  // 4️⃣ Store tokens in user_connections
-  // -----------------------------
-  const supabaseDb = createClient(supabaseUrl, serviceKey);
-
-  const { error } = await supabaseDb.from("user_connections").upsert({
-    user_id: supabaseUserId,
+  // 4️⃣ Store MS tokens in your user_connections table
+  await supabase.from("user_connections").upsert({
+    user_id: existingUser.id,
     provider: "microsoft",
     access_token,
     refresh_token,
     expires_at: new Date(Date.now() + expires_in * 1000).toISOString(),
   });
 
-  if (error) {
-    console.error("❌ Database insert error:", error);
-    return new Response("Database error", { status: 500 });
-  }
+  // 5️⃣ Create a Supabase session cookie (sign user in)
+  const sessionClient = createClient(supabaseUrl, serviceKey, {
+    auth: { persistSession: false },
+  });
 
-  // -----------------------------
-  // 5️⃣ Redirect to dashboard
-  // -----------------------------
-  return NextResponse.redirect(`${siteUrl}/auth/callback/final?user=${supabaseUserId}`);
+  const { data: sessionData } = await sessionClient.auth.admin.generateSession({
+    user_id: existingUser.id,
+  });
+
+  // Send cookie to browser
+  const response = NextResponse.redirect(`${siteUrl}`);
+
+  response.cookies.set("sb-access-token", sessionData.session.access_token, {
+    path: "/",
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+  });
+
+  response.cookies.set("sb-refresh-token", sessionData.session.refresh_token, {
+    path: "/",
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+  });
+
+  return response;
 }
