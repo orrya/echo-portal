@@ -3,8 +3,9 @@ import { createClient } from "@supabase/supabase-js";
 
 export async function GET(req: Request) {
   try {
-    const url = new URL(req.url);
-    const code = url.searchParams.get("code");
+    // ✅ FIXED: safe searchParams extraction (no static generation bailout)
+    const { searchParams } = new URL(req.url);
+    const code = searchParams.get("code");
 
     if (!code) {
       return new Response("No code provided", { status: 400 });
@@ -35,17 +36,20 @@ export async function GET(req: Request) {
     // -----------------------------
     // 1. Exchange code → Tokens
     // -----------------------------
-    const tokenRes = await fetch("https://login.microsoftonline.com/common/oauth2/v2.0/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: redirectUri,
-      }),
-    });
+    const tokenRes = await fetch(
+      "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: redirectUri,
+        }),
+      }
+    );
 
     const tokenJson = await tokenRes.json();
 
@@ -93,10 +97,11 @@ export async function GET(req: Request) {
     if (!user) {
       console.log("Creating new user:", email);
 
-      const { data: createdUser, error: createErr } = await admin.auth.admin.createUser({
-        email,
-        email_confirm: true,
-      });
+      const { data: createdUser, error: createErr } =
+        await admin.auth.admin.createUser({
+          email,
+          email_confirm: true,
+        });
 
       if (createErr) {
         console.error("❌ User creation failed:", createErr);
@@ -113,24 +118,25 @@ export async function GET(req: Request) {
 
     // -----------------------------
     // 5 – Create Supabase session (bypass TS safely)
-const adminAny = admin as any; // bypass TypeScript limitations
+    // -----------------------------
+    const adminAny = admin as any;
 
-const { data: sessionData, error: sessionErr } =
-  await adminAny.auth.admin.createSession({
-    user_id: user.id,
-  });
+    const { data: sessionData, error: sessionErr } =
+      await adminAny.auth.admin.createSession({
+        user_id: user.id,
+      });
 
-if (sessionErr || !sessionData?.session?.access_token) {
-  console.error("❌ Session creation failed:", sessionErr);
-  return new Response("Session creation failed", { status: 500 });
-}
+    if (sessionErr || !sessionData?.session?.access_token) {
+      console.error("❌ Session creation failed:", sessionErr);
+      return new Response("Session creation failed", { status: 500 });
+    }
 
     // -----------------------------
     // 6. Store Microsoft tokens
     // -----------------------------
     await admin.from("user_connections").upsert({
       user_id: user.id,
-      provider: "microsoft",
+      provider: "Microsoft",
       access_token,
       refresh_token,
       expires_at: new Date(Date.now() + expires_in * 1000).toISOString(),
@@ -141,26 +147,17 @@ if (sessionErr || !sessionData?.session?.access_token) {
     // -----------------------------
     const response = NextResponse.redirect(`${siteUrl}/dashboard`);
 
-    response.cookies.set(
-      "sb-access-token",
-      sessionData.session.access_token,
-      {
-        httpOnly: true,
-        path: "/",
-      }
-    );
+    response.cookies.set("sb-access-token", sessionData.session.access_token, {
+      httpOnly: true,
+      path: "/",
+    });
 
-    response.cookies.set(
-      "sb-refresh-token",
-      sessionData.session.refresh_token,
-      {
-        httpOnly: true,
-        path: "/",
-      }
-    );
+    response.cookies.set("sb-refresh-token", sessionData.session.refresh_token, {
+      httpOnly: true,
+      path: "/",
+    });
 
     return response;
-
   } catch (err) {
     console.error("❌ Unhandled error:", err);
     return new Response("Internal Server Error", { status: 500 });
