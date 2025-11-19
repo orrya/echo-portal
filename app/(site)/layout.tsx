@@ -1,4 +1,4 @@
-import './globals.css'
+import "../globals.css";
 import { Inter } from 'next/font/google'
 import NavBar from '@/components/NavBar'
 import { SupabaseProvider } from '@/components/SupabaseProvider'
