@@ -11,28 +11,30 @@ export default function SignInPage() {
     const clientId = process.env.NEXT_PUBLIC_AZURE_CLIENT_ID;
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
 
-    if (!clientId) {
-      console.error("❌ Missing NEXT_PUBLIC_AZURE_CLIENT_ID");
-      alert("Microsoft login is not configured.");
+    if (!clientId || !siteUrl) {
+      console.error("❌ Missing NEXT_PUBLIC env vars:", {
+        clientId,
+        siteUrl,
+      });
+      alert("Microsoft login is not configured correctly.");
+      setLoading(false);
       return;
     }
 
-    if (!siteUrl) {
-      console.error("❌ Missing NEXT_PUBLIC_SITE_URL");
-      alert("Site URL is not configured.");
-      return;
-    }
+    const redirectUri = `${siteUrl}/auth/callback`;
 
     const params = new URLSearchParams({
       client_id: clientId,
       response_type: "code",
-      redirect_uri: `${siteUrl}/auth/callback`,
+      redirect_uri: redirectUri,
       scope: "openid email offline_access profile User.Read",
       response_mode: "query",
     });
 
+    // Redirect the user to Microsoft login
     window.location.href =
-      `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params.toString()}`;
+      "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?" +
+      params.toString();
   };
 
   return (
