@@ -1,15 +1,31 @@
-export const dynamic = "force-dynamic";
+import { NextResponse } from "next/server";
 
 export async function GET() {
-  const clientId = process.env.NEXT_PUBLIC_AZURE_CLIENT_ID!;
-  const redirectUri = `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`;
+  const clientId =
+    process.env.AZURE_CLIENT_ID ?? process.env.NEXT_PUBLIC_AZURE_CLIENT_ID;
+  const tenantId = process.env.AZURE_TENANT_ID || "common";
+  const redirectUri =
+    process.env.AZURE_REDIRECT_URI ??
+    `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`;
 
-  const url = new URL("https://login.microsoftonline.com/common/oauth2/v2.0/authorize");
-  url.searchParams.set("client_id", clientId);
-  url.searchParams.set("response_type", "code");
-  url.searchParams.set("redirect_uri", redirectUri);
-  url.searchParams.set("scope", "openid email offline_access profile User.Read");
-  url.searchParams.set("response_mode", "query");
+  if (!clientId || !redirectUri) {
+    console.error("❌ Missing Azure env vars", {
+      clientId,
+      tenantId,
+      redirectUri,
+    });
+    return new Response("Server configuration error", { status: 500 });
+  }
 
-  return Response.redirect(url.toString());
+  const params = new URLSearchParams({
+    client_id: clientId,
+    response_type: "code",
+    redirect_uri: redirectUri,
+    response_mode: "query",
+    scope: "openid email offline_access profile User.Read",
+  });
+
+  const authUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize?${params.toString()}`;
+
+  return NextResponse.redirect(authUrl);
 }

@@ -3,41 +3,39 @@ import { createClient } from "@supabase/supabase-js";
 
 export async function GET(req: Request) {
   try {
-    // ✅ FIXED: safe searchParams extraction (no static generation bailout)
-    const { searchParams } = new URL(req.url);
-    const code = searchParams.get("code");
+    const url = new URL(req.url);
+    const code = url.searchParams.get("code");
 
     if (!code) {
       return new Response("No code provided", { status: 400 });
     }
 
-    // -----------------------------
-    // ENV VARS
-    // -----------------------------
-    const clientId = process.env.AZURE_CLIENT_ID!;
-    const clientSecret = process.env.AZURE_CLIENT_SECRET!;
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL!;
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+    const clientId =
+      process.env.AZURE_CLIENT_ID ?? process.env.NEXT_PUBLIC_AZURE_CLIENT_ID;
+    const clientSecret = process.env.AZURE_CLIENT_SECRET;
+    const tenantId = process.env.AZURE_TENANT_ID || "common";
+    const redirectUri =
+      process.env.AZURE_REDIRECT_URI ??
+      `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`;
 
-    if (!clientId || !clientSecret || !siteUrl || !supabaseUrl || !serviceKey) {
-      console.error("❌ Missing env vars", {
-        clientId,
-        clientSecret,
-        siteUrl,
-        supabaseUrl,
-        serviceKey,
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+
+    if (!clientId || !clientSecret || !supabaseUrl || !serviceKey || !siteUrl) {
+      console.error("❌ Missing env vars for callback", {
+        clientId: !!clientId,
+        clientSecret: !!clientSecret,
+        supabaseUrl: !!supabaseUrl,
+        serviceKey: !!serviceKey,
+        siteUrl: !!siteUrl,
       });
       return new Response("Server configuration error", { status: 500 });
     }
 
-    const redirectUri = `${siteUrl}/auth/callback`;
-
-    // -----------------------------
-    // 1. Exchange code → Tokens
-    // -----------------------------
+    // 1) Exchange code → tokens
     const tokenRes = await fetch(
-      "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+      `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
       {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -58,108 +56,116 @@ export async function GET(req: Request) {
       return new Response("Token exchange failed", { status: 400 });
     }
 
-    const access_token = tokenJson.access_token;
-    const refresh_token = tokenJson.refresh_token;
-    const expires_in = tokenJson.expires_in;
+    const accessToken: string = tokenJson.access_token;
+    const refreshToken: string | undefined = tokenJson.refresh_token;
+    const expiresIn: number = tokenJson.expires_in ?? 3600;
 
-    // -----------------------------
-    // 2. Fetch Microsoft Profile
-    // -----------------------------
+    // 2) Fetch profile from Microsoft Graph
     const profileRes = await fetch("https://graph.microsoft.com/v1.0/me", {
-      headers: { Authorization: `Bearer ${access_token}` },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
-
     const profile = await profileRes.json();
 
-    if (!profile.mail && !profile.userPrincipalName) {
-      console.error("❌ Microsoft profile error:", profile);
+    const email: string | undefined =
+      profile.mail ?? profile.userPrincipalName ?? undefined;
+
+    if (!email) {
+      console.error("❌ Microsoft profile did not return an email:", profile);
       return new Response("Microsoft profile error", { status: 400 });
     }
 
-    const email = profile.mail ?? profile.userPrincipalName;
+    // 3) Supabase admin client
+    const admin = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false },
+    });
 
-    // -----------------------------
-    // 3. Init Supabase admin client
-    // -----------------------------
-    const admin = createClient(supabaseUrl, serviceKey);
-
-    // -----------------------------
-    // 4. Find or create Supabase User
-    // -----------------------------
-    const { data: existingUser } = await admin
+    // 4) Find or create Supabase user
+    const { data: existingUser, error: selectErr } = await admin
       .from("auth.users")
       .select("*")
       .eq("email", email)
       .maybeSingle();
 
+    if (selectErr) {
+      console.error("❌ Error selecting auth.users:", selectErr);
+    }
+
     let user = existingUser;
 
     if (!user) {
-      console.log("Creating new user:", email);
+      console.log("Creating new Supabase user for", email);
 
-      const { data: createdUser, error: createErr } =
-        await admin.auth.admin.createUser({
-          email,
-          email_confirm: true,
-        });
+      const adminAny = admin as any;
+      const {
+        data: created,
+        error: createErr,
+      } = await adminAny.auth.admin.createUser({
+        email,
+        email_confirm: true,
+      });
 
-      if (createErr) {
+      if (createErr || !created?.user) {
         console.error("❌ User creation failed:", createErr);
         return new Response("User creation failed", { status: 500 });
       }
 
-      user = createdUser;
+      user = created.user;
     }
 
-    if (!user) {
-      console.error("❌ Could not resolve user object");
+    const userId: string = (user as any).id ?? (user as any).user_id;
+
+    if (!userId) {
+      console.error("❌ Could not resolve user id from user object:", user);
       return new Response("User resolution error", { status: 500 });
     }
 
-    // -----------------------------
-    // 5 – Create Supabase session (bypass TS safely)
-    // -----------------------------
+    // 5) Create Supabase session (admin API, untyped – cast to any)
     const adminAny = admin as any;
+    const {
+      data: sessionData,
+      error: sessionErr,
+    } = await adminAny.auth.admin.createSession({
+      user_id: userId,
+    });
 
-    const { data: sessionData, error: sessionErr } =
-      await adminAny.auth.admin.createSession({
-        user_id: user.id,
-      });
-
-    if (sessionErr || !sessionData?.session?.access_token) {
+    if (sessionErr || !sessionData?.session) {
       console.error("❌ Session creation failed:", sessionErr);
       return new Response("Session creation failed", { status: 500 });
     }
 
-    // -----------------------------
-    // 6. Store Microsoft tokens
-    // -----------------------------
-    await admin.from("user_connections").upsert({
-      user_id: user.id,
-      provider: "Microsoft",
-      access_token,
-      refresh_token,
-      expires_at: new Date(Date.now() + expires_in * 1000).toISOString(),
+    // 6) Store Microsoft tokens for n8n / later use
+    const { error: connErr } = await admin.from("user_connections").upsert({
+      user_id: userId,
+      provider: "microsoft",
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
     });
 
-    // -----------------------------
-    // 7. Set Supabase auth cookie
-    // -----------------------------
+    if (connErr) {
+      console.error("⚠️ user_connections upsert error:", connErr);
+    }
+
+    // 7) Set Supabase auth cookies & redirect to dashboard
     const response = NextResponse.redirect(`${siteUrl}/dashboard`);
 
     response.cookies.set("sb-access-token", sessionData.session.access_token, {
       httpOnly: true,
+      secure: true,
+      sameSite: "lax",
       path: "/",
     });
 
     response.cookies.set("sb-refresh-token", sessionData.session.refresh_token, {
       httpOnly: true,
+      secure: true,
+      sameSite: "lax",
       path: "/",
     });
 
     return response;
   } catch (err) {
-    console.error("❌ Unhandled error:", err);
+    console.error("❌ Unhandled error in /auth/callback:", err);
     return new Response("Internal Server Error", { status: 500 });
   }
 }
