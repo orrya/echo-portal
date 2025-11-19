@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
+  const pathname = req.nextUrl.pathname;
 
   // Allow all auth routes
   if (pathname.startsWith("/auth")) {
@@ -18,19 +18,18 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Allow API routes that should not require auth
+  // Allow API routes
   if (pathname.startsWith("/api")) {
     return NextResponse.next();
   }
 
-  // Check Supabase session cookies
-  const access = req.cookies.get("sb-access-token")?.value;
-  const refresh = req.cookies.get("sb-refresh-token")?.value;
+  // NEW: use our own session cookie
+  const sessionToken = req.cookies.get("echo-session")?.value;
 
-  // If neither token is present → not authenticated
-  if (!access && !refresh) {
+  if (!sessionToken) {
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = "/auth/sign-in";
+    redirectUrl.search = "";
     return NextResponse.redirect(redirectUrl);
   }
 
@@ -38,7 +37,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico).*)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
