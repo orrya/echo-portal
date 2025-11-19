@@ -7,23 +7,18 @@ export async function GET(req: Request) {
 
   if (!code) {
     return new Response("No code provided", { status: 400 });
-    }
+  }
 
   // Env vars
-  const clientId = process.env.AZURE_CLIENT_ID;
-  const clientSecret = process.env.AZURE_CLIENT_SECRET;
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!clientId || !clientSecret || !siteUrl || !supabaseUrl || !serviceKey) {
-    console.error("Missing env vars");
-    return new Response("Server configuration error", { status: 500 });
-  }
+  const clientId = process.env.AZURE_CLIENT_ID!;
+  const clientSecret = process.env.AZURE_CLIENT_SECRET!;
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL!;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
   const redirectUri = `${siteUrl}/auth/callback`;
 
-  // 1️⃣ Exchange CODE → TOKENS
+  // 1️⃣ Exchange authorization code for tokens
   const tokenRes = await fetch(
     "https://login.microsoftonline.com/common/oauth2/v2.0/token",
     {
@@ -50,7 +45,7 @@ export async function GET(req: Request) {
   const refresh_token = tokenJson.refresh_token;
   const expires_in = tokenJson.expires_in;
 
-  // 2️⃣ Get Microsoft user profile
+  // 2️⃣ Fetch Microsoft profile
   const profileRes = await fetch("https://graph.microsoft.com/v1.0/me", {
     headers: { Authorization: `Bearer ${access_token}` },
   });
@@ -62,67 +57,66 @@ export async function GET(req: Request) {
     return new Response("Microsoft profile error", { status: 400 });
   }
 
-  const supabase = createClient(supabaseUrl, serviceKey);
+  const authEmail = profile.mail.toLowerCase();
 
-  // 3️⃣ Ensure Supabase Auth user exists
-  const authUserEmail = profile.mail.toLowerCase();
+  // 3️⃣ Get or create Supabase user
+  const admin = createClient(supabaseUrl, serviceKey);
 
-  let { data: existingUser } = await supabase
+  const { data: existingUser } = await admin
     .from("auth.users")
     .select("*")
-    .eq("email", authUserEmail)
+    .eq("email", authEmail)
     .maybeSingle();
 
-  if (!existingUser) {
-    // Create user via service key
-    const { data: createdUser, error: createErr } =
-      await supabase.auth.admin.createUser({
-        email: authUserEmail,
+  let userId = existingUser?.id;
+
+  if (!userId) {
+    const { data: createdUser, error: createErr } = await admin.auth.admin.createUser(
+      {
+        email: authEmail,
         email_confirm: true,
-      });
+      }
+    );
 
     if (createErr) {
       console.error("User creation failed:", createErr);
-      return new Response("User creation failed.", { status: 500 });
+      return new Response("User creation failed", { status: 500 });
     }
 
-    existingUser = createdUser.user;
+    userId = createdUser.user.id;
   }
 
-  // 4️⃣ Store MS tokens in your user_connections table
-  await supabase.from("user_connections").upsert({
-    user_id: existingUser.id,
+  // 4️⃣ Store MS tokens
+  const { error: connErr } = await admin.from("user_connections").upsert({
+    user_id: userId,
     provider: "microsoft",
     access_token,
     refresh_token,
     expires_at: new Date(Date.now() + expires_in * 1000).toISOString(),
   });
 
-  // 5️⃣ Create a Supabase session cookie (sign user in)
-  const sessionClient = createClient(supabaseUrl, serviceKey, {
+  if (connErr) {
+    console.error("DB insert failed:", connErr);
+    return new Response("Database error", { status: 500 });
+  }
+
+  // 5️⃣ Create a Supabase session cookie (no generateSession)
+  const supabase = createClient(supabaseUrl, serviceKey, {
     auth: { persistSession: false },
   });
 
-  const { data: sessionData } = await sessionClient.auth.admin.generateSession({
-    user_id: existingUser.id,
+  const { data: session, error: sessErr } = await supabase.auth.signInWithIdToken({
+    provider: "azure",
+    token: access_token,
   });
 
-  // Send cookie to browser
-  const response = NextResponse.redirect(`${siteUrl}`);
+  if (sessErr) {
+    console.error("Session creation failed:", sessErr);
+    return new Response("Session creation failed", { status: 500 });
+  }
 
-  response.cookies.set("sb-access-token", sessionData.session.access_token, {
-    path: "/",
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-  });
-
-  response.cookies.set("sb-refresh-token", sessionData.session.refresh_token, {
-    path: "/",
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-  });
-
+  // Attach session cookie to response
+  const response = NextResponse.redirect(`${siteUrl}/dashboard`);
+  supabase.auth.setSession(session.session);
   return response;
 }
