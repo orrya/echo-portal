@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// -----------------------------
-//  AUTH CALLBACK ROUTE
-// -----------------------------
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
@@ -13,7 +10,7 @@ export async function GET(req: Request) {
   }
 
   // -----------------------------
-  //  ENV Vars (validated safely)
+  // ✅ Required Environment Vars
   // -----------------------------
   const clientId = process.env.AZURE_CLIENT_ID;
   const clientSecret = process.env.AZURE_CLIENT_SECRET;
@@ -22,14 +19,7 @@ export async function GET(req: Request) {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!clientId || !clientSecret || !siteUrl || !supabaseUrl || !serviceKey) {
-    console.error("❌ Missing env vars", {
-      clientId,
-      clientSecret,
-      siteUrl,
-      supabaseUrl,
-      serviceKey,
-    });
-
+    console.error("❌ Missing environment variables");
     return new Response("Server configuration error", { status: 500 });
   }
 
@@ -38,17 +28,20 @@ export async function GET(req: Request) {
   // -----------------------------
   // 1️⃣ Exchange code → Tokens
   // -----------------------------
-  const tokenRes = await fetch("https://login.microsoftonline.com/common/oauth2/v2.0/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: redirectUri,
-    }),
-  });
+  const tokenRes = await fetch(
+    "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: redirectUri,
+      }),
+    }
+  );
 
   const tokenJson = await tokenRes.json();
 
@@ -62,7 +55,7 @@ export async function GET(req: Request) {
   const expires_in = tokenJson.expires_in;
 
   // -----------------------------
-  // 2️⃣ Fetch profile from Graph
+  // 2️⃣ Fetch Microsoft Profile
   // -----------------------------
   const profileRes = await fetch("https://graph.microsoft.com/v1.0/me", {
     headers: { Authorization: `Bearer ${access_token}` },
@@ -70,18 +63,54 @@ export async function GET(req: Request) {
 
   const profile = await profileRes.json();
 
-  if (!profile.id) {
-    console.error("❌ Failed to fetch Microsoft user profile:", profile);
+  if (!profile || !profile.id) {
+    console.error("❌ Failed to fetch Microsoft profile:", profile);
     return new Response("Microsoft profile error", { status: 400 });
   }
 
-  // -----------------------------
-  // 3️⃣ Store in Supabase (Service role)
-  // -----------------------------
-  const supabase = createClient(supabaseUrl, serviceKey);
+  // Extract usable email
+  const email = profile.mail || profile.userPrincipalName;
+  if (!email) {
+    console.error("❌ Microsoft returned no email:", profile);
+    return new Response("Email missing from Microsoft", { status: 400 });
+  }
 
-  const { error } = await supabase.from("user_connections").upsert({
-    user_id: profile.id,
+  // -----------------------------
+  // 3️⃣ Ensure Supabase User Exists
+  // -----------------------------
+  const supabaseAdmin = createClient(supabaseUrl, serviceKey);
+
+  // Try to find existing supabase user
+  let { data: existingUser } = await supabaseAdmin
+    .from("auth.users")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle();
+
+  // If not found, create user
+  if (!existingUser) {
+    const newUser = await supabaseAdmin.auth.admin.createUser({
+      email,
+      email_confirm: true,
+    });
+
+    if (newUser.error) {
+      console.error("❌ Failed to create Supabase user:", newUser.error);
+      return new Response("User creation failed", { status: 500 });
+    }
+
+    existingUser = newUser.data.user;
+  }
+
+  const supabaseUserId = existingUser.id;
+
+  // -----------------------------
+  // 4️⃣ Store tokens in user_connections
+  // -----------------------------
+  const supabaseDb = createClient(supabaseUrl, serviceKey);
+
+  const { error } = await supabaseDb.from("user_connections").upsert({
+    user_id: supabaseUserId,
     provider: "microsoft",
     access_token,
     refresh_token,
@@ -89,12 +118,12 @@ export async function GET(req: Request) {
   });
 
   if (error) {
-    console.error("❌ DB Insert error:", error);
+    console.error("❌ Database insert error:", error);
     return new Response("Database error", { status: 500 });
   }
 
   // -----------------------------
-  // 4️⃣ Redirect to portal
+  // 5️⃣ Redirect to dashboard
   // -----------------------------
   return NextResponse.redirect(siteUrl);
 }
