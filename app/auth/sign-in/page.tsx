@@ -15,11 +15,14 @@ export default function SignInPage() {
     e.preventDefault()
     setLoading(true)
     setError(null)
+
     const { error } = await supabaseClient.auth.signInWithPassword({
       email,
       password,
     })
+
     setLoading(false)
+
     if (error) {
       setError(error.message)
     } else {
@@ -32,7 +35,8 @@ export default function SignInPage() {
       provider: 'azure',
       options: {
         scopes: 'email offline_access',
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
+        // FINAL FIX → DIRECT HARD-CODED REDIRECT URL
+        redirectTo: 'https://echo-portal.vercel.app/auth/callback',
       },
     })
   }
@@ -40,11 +44,14 @@ export default function SignInPage() {
   const handleSignUp = async () => {
     setLoading(true)
     setError(null)
+
     const { error } = await supabaseClient.auth.signUp({
       email,
       password,
     })
+
     setLoading(false)
+
     if (error) {
       setError(error.message)
     } else {
@@ -54,18 +61,23 @@ export default function SignInPage() {
 
   return (
     <div className="max-w-md mx-auto mt-10 bg-graphite-dark p-6 rounded-lg shadow-glass">
-      <h1 className="text-2xl font-semibold text-purple mb-4">Sign in to Echo Suite</h1>
+      <h1 className="text-2xl font-semibold text-purple mb-4">
+        Sign in to Echo Suite
+      </h1>
+
       <button
         onClick={handleMicrosoft}
         className="w-full bg-purple hover:bg-magenta text-black py-2 px-4 rounded-md mb-4"
       >
         Continue with Microsoft
       </button>
+
       <div className="flex items-center my-4">
         <div className="flex-grow border-t border-graphite-light"></div>
         <span className="mx-2 text-graphite-light text-xs">or</span>
         <div className="flex-grow border-t border-graphite-light"></div>
       </div>
+
       <form onSubmit={handleSignIn} className="space-y-4">
         <div>
           <label htmlFor="email" className="block text-sm text-purple">
@@ -80,6 +92,7 @@ export default function SignInPage() {
             required
           />
         </div>
+
         <div>
           <label htmlFor="password" className="block text-sm text-purple">
             Password
@@ -93,7 +106,9 @@ export default function SignInPage() {
             required
           />
         </div>
+
         {error && <p className="text-red-400 text-sm">{error}</p>}
+
         <div className="flex gap-2">
           <button
             type="submit"
@@ -102,6 +117,7 @@ export default function SignInPage() {
           >
             {loading ? 'Signing in...' : 'Sign in'}
           </button>
+
           <button
             type="button"
             disabled={loading}
