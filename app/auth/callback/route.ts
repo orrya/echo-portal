@@ -8,27 +8,20 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const code = url.searchParams.get("code");
 
-    if (!code) {
-      return new Response("No authorization code provided", { status: 400 });
-    }
+    if (!code) return new Response("Missing code", { status: 400 });
 
-    const clientId =
-      process.env.AZURE_CLIENT_ID ?? process.env.NEXT_PUBLIC_AZURE_CLIENT_ID;
-    const clientSecret = process.env.AZURE_CLIENT_SECRET;
+    // ENV
+    const clientId = process.env.AZURE_CLIENT_ID!;
+    const clientSecret = process.env.AZURE_CLIENT_SECRET!;
     const tenantId = process.env.AZURE_TENANT_ID || "common";
-
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL!;
-    const redirectUri =
-      process.env.AZURE_REDIRECT_URI ?? `${siteUrl}/auth/callback`;
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL!;
 
-    // ---- SAFETY ----
-    if (!clientId || !clientSecret || !supabaseUrl || !serviceKey || !siteUrl) {
-      console.error("❌ Missing environment variables!");
-      return new Response("Server configuration error", { status: 500 });
-    }
+    const redirectUri =
+      process.env.AZURE_REDIRECT_URI ??
+      `${siteUrl}/auth/callback`;
 
     // 1) Exchange code → tokens
     const tokenRes = await fetch(
@@ -47,9 +40,8 @@ export async function GET(req: Request) {
     );
 
     const tokenJson = await tokenRes.json();
-
     if (!tokenRes.ok) {
-      console.error("❌ Token exchange failed:", tokenJson);
+      console.error("Token exchange error:", tokenJson);
       return new Response("Token exchange failed", { status: 400 });
     }
 
@@ -66,36 +58,23 @@ export async function GET(req: Request) {
     const email = profile.mail ?? profile.userPrincipalName;
 
     if (!email) {
-      console.error("❌ Microsoft profile missing email:", profile);
-      return new Response("Profile error", { status: 400 });
+      console.error("No email from Microsoft:", profile);
+      return new Response("Invalid profile", { status: 400 });
     }
 
-    // 3) Supabase admin client
+    // SUPABASE ADMIN
     const supabase = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false },
     });
+
+    // 3) Lookup or create user
     const admin = (supabase as any).auth.admin;
 
-    ///
-    /// 4) FIND EXISTING USER — using listUsers()
-    ///
-    const { data: usersPage, error: listErr } = await admin.listUsers();
-
-    if (listErr) {
-      console.error("❌ listUsers() failed:", listErr);
-      return new Response("User lookup failed", { status: 500 });
-    }
-
-    // Case-insensitive match
-    const existingUser = usersPage.users.find(
+    const { data: page } = await admin.listUsers();
+    let user = page.users.find(
       (u: any) => u.email?.toLowerCase() === email.toLowerCase()
     );
 
-    let user = existingUser;
-
-    ///
-    /// 5) CREATE USER IF NOT FOUND
-    ///
     if (!user) {
       const { data: created, error: createErr } = await admin.createUser({
         email,
@@ -103,53 +82,38 @@ export async function GET(req: Request) {
       });
 
       if (createErr) {
-        // Prevent duplicate creation error breaking login
-        if (createErr.code === "email_exists") {
-          console.log("ℹ User already exists. Fetching again...");
-          // Try again after creation conflict
-          const { data: retryPage } = await admin.listUsers();
-          user = retryPage.users.find(
-            (u: any) => u.email?.toLowerCase() === email.toLowerCase()
-          );
-        } else {
-          console.error("❌ User creation failed:", createErr);
-          return new Response("User creation failed", { status: 500 });
-        }
-      } else {
-        user = created.user;
+        console.error("User creation failed:", createErr);
+        return new Response("User creation failed", { status: 500 });
       }
+
+      user = created.user;
     }
 
-    if (!user) {
-      console.error("❌ Could not resolve user");
-      return new Response("User lookup failure", { status: 500 });
-    }
-
-    ///
-    /// 6) CREATE SESSION — via magic link (Supabase JS v2)
-    ///
-    const { data: linkData, error: linkErr } = await admin.generateLink({
-      type: "magiclink",
-      email: user.email,
+    // 4) Create Supabase session USING PASSWORDLESS LOGIN (no email sent)
+    const loginRes = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: {
+        apiKey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: email,
+        password: "", // empty because we use passwordless auth
+      }),
     });
 
-    if (linkErr || !linkData?.action_link) {
-      console.error("❌ Failed to generate link:", linkErr);
+    const loginJson = await loginRes.json();
+
+    if (!loginRes.ok || !loginJson.access_token) {
+      console.error("Supabase login failed:", loginJson);
       return new Response("Session creation failed", { status: 500 });
     }
 
-    const actionUrl = new URL(linkData.action_link);
-    const sessionToken = actionUrl.searchParams.get("token");
+    const supabaseAccessToken = loginJson.access_token;
 
-    if (!sessionToken) {
-      console.error("❌ Missing session token");
-      return new Response("Session token error", { status: 500 });
-    }
-
-    ///
-    /// 7) Save Microsoft tokens in user_connections
-    ///
-    const { error: connErr } = await supabase.from("user_connections").upsert({
+    // 5) Store Microsoft tokens
+    await supabase.from("user_connections").upsert({
       user_id: user.id,
       provider: "microsoft",
       access_token: accessToken,
@@ -157,16 +121,9 @@ export async function GET(req: Request) {
       expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
     });
 
-    if (connErr) {
-      console.error("⚠️ Failed to save connection:", connErr);
-    }
-
-    ///
-    /// 8) SET COOKIE AND REDIRECT
-    ///
+    // 6) Set cookie & redirect
     const response = NextResponse.redirect(`${siteUrl}/dashboard`);
-
-    response.cookies.set("sb-access-token", sessionToken, {
+    response.cookies.set("sb-access-token", supabaseAccessToken, {
       httpOnly: true,
       secure: true,
       sameSite: "lax",
@@ -175,7 +132,7 @@ export async function GET(req: Request) {
 
     return response;
   } catch (err) {
-    console.error("❌ Unhandled error in /auth/callback:", err);
+    console.error("❌ Callback error:", err);
     return new Response("Internal Server Error", { status: 500 });
   }
 }
