@@ -9,7 +9,7 @@ export async function GET(req: Request) {
     const code = url.searchParams.get("code");
 
     if (!code) {
-      return new Response("No code provided", { status: 400 });
+      return new Response("No authorization code provided", { status: 400 });
     }
 
     const clientId =
@@ -24,9 +24,9 @@ export async function GET(req: Request) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-    // SAFETY
+    // ---- SAFETY ----
     if (!clientId || !clientSecret || !supabaseUrl || !serviceKey || !siteUrl) {
-      console.error("❌ Missing environment variables");
+      console.error("❌ Missing environment variables!");
       return new Response("Server configuration error", { status: 500 });
     }
 
@@ -61,66 +61,94 @@ export async function GET(req: Request) {
     const profileRes = await fetch("https://graph.microsoft.com/v1.0/me", {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    const profile = await profileRes.json();
 
+    const profile = await profileRes.json();
     const email = profile.mail ?? profile.userPrincipalName;
 
     if (!email) {
-      console.error("❌ No email returned from Microsoft", profile);
+      console.error("❌ Microsoft profile missing email:", profile);
       return new Response("Profile error", { status: 400 });
     }
 
-    // 3) Supabase Admin Client
+    // 3) Supabase admin client
     const supabase = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false },
     });
     const admin = (supabase as any).auth.admin;
 
-    // 4) Get user by email (BEST METHOD)
-    const { data: existing, error: lookupErr } = await admin.getUserByEmail(
-      email
+    ///
+    /// 4) FIND EXISTING USER — using listUsers()
+    ///
+    const { data: usersPage, error: listErr } = await admin.listUsers();
+
+    if (listErr) {
+      console.error("❌ listUsers() failed:", listErr);
+      return new Response("User lookup failed", { status: 500 });
+    }
+
+    // Case-insensitive match
+    const existingUser = usersPage.users.find(
+      (u: any) => u.email?.toLowerCase() === email.toLowerCase()
     );
 
-    let user = existing?.user;
+    let user = existingUser;
 
-    // 5) Create user if not found
+    ///
+    /// 5) CREATE USER IF NOT FOUND
+    ///
     if (!user) {
-      console.log("Creating new Supabase user:", email);
-
       const { data: created, error: createErr } = await admin.createUser({
         email,
         email_confirm: true,
       });
 
-      if (createErr || !created?.user) {
-        console.error("❌ User creation failed:", createErr);
-        return new Response("User creation failed", { status: 500 });
+      if (createErr) {
+        // Prevent duplicate creation error breaking login
+        if (createErr.code === "email_exists") {
+          console.log("ℹ User already exists. Fetching again...");
+          // Try again after creation conflict
+          const { data: retryPage } = await admin.listUsers();
+          user = retryPage.users.find(
+            (u: any) => u.email?.toLowerCase() === email.toLowerCase()
+          );
+        } else {
+          console.error("❌ User creation failed:", createErr);
+          return new Response("User creation failed", { status: 500 });
+        }
+      } else {
+        user = created.user;
       }
-
-      user = created.user;
     }
 
-    // 6) Create user session via magic link
+    if (!user) {
+      console.error("❌ Could not resolve user");
+      return new Response("User lookup failure", { status: 500 });
+    }
+
+    ///
+    /// 6) CREATE SESSION — via magic link (Supabase JS v2)
+    ///
     const { data: linkData, error: linkErr } = await admin.generateLink({
       type: "magiclink",
       email: user.email,
     });
 
     if (linkErr || !linkData?.action_link) {
-      console.error("❌ Failed to generate session", linkErr);
+      console.error("❌ Failed to generate link:", linkErr);
       return new Response("Session creation failed", { status: 500 });
     }
 
-    // Extract access token
-    const sessionUrl = new URL(linkData.action_link);
-    const sessionAccessToken = sessionUrl.searchParams.get("token");
+    const actionUrl = new URL(linkData.action_link);
+    const sessionToken = actionUrl.searchParams.get("token");
 
-    if (!sessionAccessToken) {
-      console.error("❌ Session token missing");
+    if (!sessionToken) {
+      console.error("❌ Missing session token");
       return new Response("Session token error", { status: 500 });
     }
 
-    // 7) Upsert Microsoft tokens into user_connections
+    ///
+    /// 7) Save Microsoft tokens in user_connections
+    ///
     const { error: connErr } = await supabase.from("user_connections").upsert({
       user_id: user.id,
       provider: "microsoft",
@@ -130,13 +158,15 @@ export async function GET(req: Request) {
     });
 
     if (connErr) {
-      console.error("⚠️ user_connections upsert failed:", connErr);
+      console.error("⚠️ Failed to save connection:", connErr);
     }
 
-    // 8) Issue auth cookie and redirect
+    ///
+    /// 8) SET COOKIE AND REDIRECT
+    ///
     const response = NextResponse.redirect(`${siteUrl}/dashboard`);
 
-    response.cookies.set("sb-access-token", sessionAccessToken, {
+    response.cookies.set("sb-access-token", sessionToken, {
       httpOnly: true,
       secure: true,
       sameSite: "lax",
