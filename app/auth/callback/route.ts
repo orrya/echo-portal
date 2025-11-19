@@ -112,19 +112,18 @@ export async function GET(req: Request) {
     }
 
     // -----------------------------
-    // 5. Create Supabase Session
-    // (this API exists but lacks TypeScript definitions)
-    // -----------------------------
-    // @ts-ignore - Supabase GoTrue v2 method is real but untyped
-    const { data: sessionData, error: sessionErr } =
-      await admin.auth.admin.createSession({
-        user_id: user.id,
-      });
+    // 5 – Create Supabase session (bypass TS safely)
+const adminAny = admin as any; // bypass TypeScript limitations
 
-    if (sessionErr || !sessionData?.session?.access_token) {
-      console.error("❌ Session creation failed:", sessionErr);
-      return new Response("Session creation failed", { status: 500 });
-    }
+const { data: sessionData, error: sessionErr } =
+  await adminAny.auth.admin.createSession({
+    user_id: user.id,
+  });
+
+if (sessionErr || !sessionData?.session?.access_token) {
+  console.error("❌ Session creation failed:", sessionErr);
+  return new Response("Session creation failed", { status: 500 });
+}
 
     // -----------------------------
     // 6. Store Microsoft tokens
