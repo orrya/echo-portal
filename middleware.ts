@@ -2,27 +2,33 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export function middleware(req: NextRequest) {
-  const url = req.nextUrl;
+  const { pathname } = req.nextUrl;
 
-  // Allow public routes (sign-in + OAuth callback + assets)
-  const publicPaths = [
-    "/auth/sign-in",
-    "/auth/callback",
-    "/auth/redirect",
-    "/favicon.ico",
-    "/_next",
-    "/public",
-  ];
-
-  if (publicPaths.some((path) => url.pathname.startsWith(path))) {
+  // Allow all auth routes
+  if (pathname.startsWith("/auth")) {
     return NextResponse.next();
   }
 
-  // Check Supabase auth cookies
-  const accessToken = req.cookies.get("sb-access-token");
+  // Allow public assets
+  if (
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/favicon") ||
+    pathname.startsWith("/public")
+  ) {
+    return NextResponse.next();
+  }
 
-  // If no session → redirect
-  if (!accessToken) {
+  // Allow API routes that should not require auth
+  if (pathname.startsWith("/api")) {
+    return NextResponse.next();
+  }
+
+  // Check Supabase session cookies
+  const access = req.cookies.get("sb-access-token")?.value;
+  const refresh = req.cookies.get("sb-refresh-token")?.value;
+
+  // If neither token is present → not authenticated
+  if (!access && !refresh) {
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = "/auth/sign-in";
     return NextResponse.redirect(redirectUrl);
@@ -31,7 +37,6 @@ export function middleware(req: NextRequest) {
   return NextResponse.next();
 }
 
-// Match everything EXCEPT static files
 export const config = {
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico).*)",
