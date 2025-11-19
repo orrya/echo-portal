@@ -31,15 +31,15 @@ export default function SignInPage() {
   }
 
   const handleMicrosoft = async () => {
-    await supabaseClient.auth.signInWithOAuth({
-      provider: 'azure',
-      options: {
-        scopes: 'email offline_access',
-        // FINAL FIX → DIRECT HARD-CODED REDIRECT URL
-        redirectTo: 'https://echo-portal.vercel.app/auth/callback',
-      },
-    })
-  }
+  await supabaseClient.auth.signInWithOAuth({
+    provider: 'azure',
+    options: {
+      scopes: 'email offline_access',
+      // REMOVE redirectTo entirely
+    },
+  });
+};
+
 
   const handleSignUp = async () => {
     setLoading(true)
