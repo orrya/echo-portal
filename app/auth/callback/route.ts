@@ -125,5 +125,5 @@ export async function GET(req: Request) {
   // -----------------------------
   // 5️⃣ Redirect to dashboard
   // -----------------------------
-  return NextResponse.redirect(`${siteUrl}/auth/callback?user=${supabaseUserId}`);
+  return NextResponse.redirect(`${siteUrl}/auth/callback/final?user=${supabaseUserId}`);
 }
