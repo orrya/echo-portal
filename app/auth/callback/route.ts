@@ -19,13 +19,12 @@ export async function GET(req: Request) {
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL!;
     const redirectUri =
-      process.env.AZURE_REDIRECT_URI ??
-      `${siteUrl}/auth/callback`;
+      process.env.AZURE_REDIRECT_URI ?? `${siteUrl}/auth/callback`;
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-    // ---- SAFETY CHECK ----
+    // SAFETY
     if (!clientId || !clientSecret || !supabaseUrl || !serviceKey || !siteUrl) {
       console.error("❌ Missing environment variables");
       return new Response("Server configuration error", { status: 500 });
@@ -71,29 +70,22 @@ export async function GET(req: Request) {
       return new Response("Profile error", { status: 400 });
     }
 
-    // 3) Create Supabase Admin client
+    // 3) Supabase Admin Client
     const supabase = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false },
     });
     const admin = (supabase as any).auth.admin;
 
-    ///
-    /// 4) Find existing Supabase user
-    ///
-    const { data: userList, error: listErr } = await admin.listUsers();
+    // 4) Get user by email (BEST METHOD)
+    const { data: existing, error: lookupErr } = await admin.getUserByEmail(
+      email
+    );
 
-    if (listErr) {
-      console.error("❌ Failed to list users:", listErr);
-      return new Response("User lookup failed", { status: 500 });
-    }
+    let user = existing?.user;
 
-    let user = userList.users.find((u: any) => u.email === email);
-
-    ///
-    /// 5) Create user if not exist
-    ///
+    // 5) Create user if not found
     if (!user) {
-      console.log("Creating new user for:", email);
+      console.log("Creating new Supabase user:", email);
 
       const { data: created, error: createErr } = await admin.createUser({
         email,
@@ -101,37 +93,34 @@ export async function GET(req: Request) {
       });
 
       if (createErr || !created?.user) {
-        console.error("❌ Failed to create user:", createErr);
+        console.error("❌ User creation failed:", createErr);
         return new Response("User creation failed", { status: 500 });
       }
 
       user = created.user;
     }
 
-    ///
-    /// 6) Create a Supabase session
-    ///
-    const { data: sessionData, error: sessionErr } =
-      await admin.generateLink({
-        type: "magiclink",
-        email: email,
-      });
+    // 6) Create user session via magic link
+    const { data: linkData, error: linkErr } = await admin.generateLink({
+      type: "magiclink",
+      email: user.email,
+    });
 
-    if (sessionErr || !sessionData?.action_link) {
-      console.error("❌ Failed to create session:", sessionErr);
+    if (linkErr || !linkData?.action_link) {
+      console.error("❌ Failed to generate session", linkErr);
       return new Response("Session creation failed", { status: 500 });
     }
 
-    // Extract token from generated link
-    const sessionUrl = new URL(sessionData.action_link);
+    // Extract access token
+    const sessionUrl = new URL(linkData.action_link);
     const sessionAccessToken = sessionUrl.searchParams.get("token");
 
     if (!sessionAccessToken) {
-      console.error("❌ Could not extract session token");
+      console.error("❌ Session token missing");
       return new Response("Session token error", { status: 500 });
     }
 
-    // 7) Store Microsoft connections
+    // 7) Upsert Microsoft tokens into user_connections
     const { error: connErr } = await supabase.from("user_connections").upsert({
       user_id: user.id,
       provider: "microsoft",
@@ -141,10 +130,10 @@ export async function GET(req: Request) {
     });
 
     if (connErr) {
-      console.error("⚠️ user_connections upsert error:", connErr);
+      console.error("⚠️ user_connections upsert failed:", connErr);
     }
 
-    // 8) Set cookie manually
+    // 8) Issue auth cookie and redirect
     const response = NextResponse.redirect(`${siteUrl}/dashboard`);
 
     response.cookies.set("sb-access-token", sessionAccessToken, {
