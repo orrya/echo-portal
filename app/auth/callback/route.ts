@@ -32,14 +32,20 @@ export async function GET(request: Request) {
     : null;
 
   // Store tokens in Supabase
-  await supabase.from("user_connections").upsert({
-    user_id: session.user.id,
-    provider: "microsoft",
-    access_token,
-    refresh_token,
-    expires_at,
-  });
+  const { error: dbError } = await supabase
+    .from("user_connections")
+    .upsert({
+      user_id: session.user.id,
+      provider: "microsoft",
+      access_token,
+      refresh_token,
+      expires_at,
+    });
 
-  // Go to dashboard
+  if (dbError) {
+    console.error("DB Error:", dbError);
+  }
+
+  // Redirect to dashboard
   return Response.redirect("https://echo-portal.vercel.app");
 }
