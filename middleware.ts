@@ -4,13 +4,10 @@ import type { NextRequest } from "next/server";
 export function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
 
-  // Allow all auth routes
-  if (pathname.startsWith("/auth")) {
-    return NextResponse.next();
-  }
-
-  // Allow public assets
+  // --- Allow public + special routes ---
   if (
+    pathname.startsWith("/auth") || 
+    pathname.startsWith("/api") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
     pathname.startsWith("/public")
@@ -18,12 +15,7 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Allow API routes
-  if (pathname.startsWith("/api")) {
-    return NextResponse.next();
-  }
-
-  // NEW: use our own session cookie
+  // --- Custom session cookie check ---
   const sessionToken = req.cookies.get("echo-session")?.value;
 
   if (!sessionToken) {
@@ -36,6 +28,14 @@ export function middleware(req: NextRequest) {
   return NextResponse.next();
 }
 
+// --- Clean matcher: protect only actual app pages ---
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    "/dashboard/:path*",
+    "/email/:path*",
+    "/summary/:path*",
+    "/settings/:path*",
+    "/activity/:path*",
+    "/((?!_next|favicon.ico|auth|api).*)",
+  ],
 };
