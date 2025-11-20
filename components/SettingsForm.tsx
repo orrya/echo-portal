@@ -8,11 +8,13 @@ export default function SettingsForm() {
   const [loading, setLoading] = useState(false);
   const [autoReply, setAutoReply] = useState(false);
 
+  /** Load settings */
   useEffect(() => {
     const fetchProfile = async () => {
       const {
         data: { user },
       } = await supabaseClient.auth.getUser();
+
       if (!user) return;
 
       const { data } = await supabaseClient
@@ -30,6 +32,7 @@ export default function SettingsForm() {
     fetchProfile();
   }, []);
 
+  /** Save settings */
   const saveSettings = async () => {
     setLoading(true);
 
@@ -51,6 +54,7 @@ export default function SettingsForm() {
     setLoading(false);
   };
 
+  /** Microsoft OAuth */
   const connectMicrosoft = async () => {
     await supabaseClient.auth.signInWithOAuth({
       provider: "azure",
@@ -64,7 +68,7 @@ export default function SettingsForm() {
   return (
     <div className="space-y-10">
 
-      {/* Preferred tone */}
+      {/* Preferred Tone */}
       <div className="space-y-3">
         <label
           htmlFor="tone"
@@ -88,41 +92,48 @@ export default function SettingsForm() {
             backdrop-blur-xl
             resize-none
             focus:outline-none
-            focus:ring-1 focus:ring-fuchsia-400/20
+            focus:ring-2 focus:ring-fuchsia-400/40
           "
         />
       </div>
 
-      {/* Auto-reply toggle */}
-      <div
-        className="
-          flex items-center justify-between
-          rounded-xl px-4 py-3
-          bg-white/[0.05] border border-white/10
-          backdrop-blur-xl
-        "
-      >
-        <label htmlFor="auto-reply" className="text-sm text-slate-200">
-          Enable auto-replies
-        </label>
+      {/* Auto-replies Group */}
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-slate-200 tracking-wide">
+          Auto-replies
+        </p>
 
-        <input
-          id="auto-reply"
-          type="checkbox"
-          checked={autoReply}
-          onChange={(e) => setAutoReply(e.target.checked)}
+        <div
           className="
-            h-4 w-4 rounded border-white/30
-            bg-black/30
-            text-fuchsia-400
-            focus:ring-fuchsia-400/40 focus:ring-offset-0
+            flex items-center justify-between
+            px-4 py-3 rounded-xl
+            bg-white/[0.05] border border-white/10
+            backdrop-blur-xl
           "
-        />
+        >
+          <label htmlFor="auto-reply" className="text-sm text-slate-200">
+            Enable auto-replies
+          </label>
+
+          <input
+            id="auto-reply"
+            type="checkbox"
+            checked={autoReply}
+            onChange={(e) => setAutoReply(e.target.checked)}
+            className="
+              h-4 w-4 rounded border-white/30
+              bg-black/30
+              text-fuchsia-400
+              focus:ring-fuchsia-400/40 focus:ring-offset-0
+            "
+          />
+        </div>
       </div>
 
-      {/* Buttons */}
-      <div className="flex flex-wrap gap-4 pt-2">
+      {/* Action buttons */}
+      <div className="flex flex-row justify-end gap-4 pt-4">
 
+        {/* Save button */}
         <button
           onClick={saveSettings}
           disabled={loading}
@@ -139,6 +150,7 @@ export default function SettingsForm() {
           {loading ? "Saving…" : "Save settings"}
         </button>
 
+        {/* Connect Microsoft */}
         <button
           onClick={connectMicrosoft}
           className="
