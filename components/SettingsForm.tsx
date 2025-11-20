@@ -8,7 +8,7 @@ export default function SettingsForm() {
   const [loading, setLoading] = useState(false);
   const [autoReply, setAutoReply] = useState(false);
 
-  // Load saved settings
+  // Load settings
   useEffect(() => {
     const fetchProfile = async () => {
       const {
@@ -16,13 +16,13 @@ export default function SettingsForm() {
       } = await supabaseClient.auth.getUser();
       if (!user) return;
 
-      const { data, error } = await supabaseClient
+      const { data } = await supabaseClient
         .from("profiles")
         .select("tone, auto_reply_rules")
         .eq("id", user.id)
         .single();
 
-      if (!error && data) {
+      if (data) {
         setTone(data.tone ?? "");
         setAutoReply(data.auto_reply_rules?.enabled ?? false);
       }
@@ -44,15 +44,13 @@ export default function SettingsForm() {
       return;
     }
 
-    const { error } = await supabaseClient.from("profiles").upsert({
+    await supabaseClient.from("profiles").upsert({
       id: user.id,
       tone,
       auto_reply_rules: { enabled: autoReply },
     });
 
-    setLoading(false);
-    if (!error) alert("Settings saved");
-  };
+    setLoading(false);};
 
   // Microsoft OAuth
   const connectMicrosoft = async () => {
@@ -66,10 +64,10 @@ export default function SettingsForm() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
 
       {/* Preferred tone */}
-      <div className="space-y-2">
+      <div className="space-y-3">
         <label
           htmlFor="tone"
           className="text-sm font-medium text-slate-200 tracking-wide"
@@ -85,59 +83,72 @@ export default function SettingsForm() {
           placeholder="e.g., Friendly, professional, concise..."
           className="
             w-full rounded-xl p-4
-            glass-panel
+            bg-white/[0.06]
+            border border-white/15
             text-slate-200 placeholder-slate-400
+            shadow-[inset_0_0_12px_rgba(255,255,255,0.05)]
+            backdrop-blur-xl
             resize-none
-            focus:outline-none focus:ring-2 focus:ring-fuchsia-400/40
+            focus:outline-none
+            focus:ring-2 focus:ring-violet-400/40
           "
         />
       </div>
 
-      {/* Auto reply toggle */}
-      <div className="flex items-center gap-3">
+      {/* Auto-reply toggle */}
+      <div
+        className="
+          flex items-center justify-between
+          rounded-xl px-4 py-3
+          bg-white/[0.05] border border-white/10
+          backdrop-blur-xl
+        "
+      >
+        <label htmlFor="auto-reply" className="text-sm text-slate-200">
+          Enable auto-replies
+        </label>
+
         <input
           id="auto-reply"
           type="checkbox"
           checked={autoReply}
           onChange={(e) => setAutoReply(e.target.checked)}
           className="
-            h-4 w-4 rounded border-white/20 bg-black/20
-            text-fuchsia-400 focus:ring-fuchsia-300/40
-          "
-        />
-        <label htmlFor="auto-reply" className="text-sm text-slate-200">
-          Enable auto-replies
-        </label>
+            h-4 w-4 rounded border-white/30
+            bg-black/30
+            text-fuchsia-400
+            focus:ring-fuchsia-400/40 focus:ring-offset-0"        />
       </div>
 
       {/* Buttons */}
       <div className="flex flex-wrap gap-4 pt-2">
 
-        {/* Primary button */}
+        {/* Save */}
         <button
           onClick={saveSettings}
           disabled={loading}
           className="
             inline-flex items-center justify-center
-            rounded-full px-6 py-2.5 text-sm font-medium
+            rounded-full px-7 py-2.5
+            text-sm font-medium text-white
             bg-gradient-to-r from-fuchsia-500 via-violet-500 to-sky-500
-            text-white shadow-[0_0_24px_rgba(129,140,248,0.55)]
+            shadow-[0_0_24px_rgba(129,140,248,0.55)]
             hover:shadow-[0_0_36px_rgba(129,140,248,0.85)]
-            transition-all
-          "
+            transition-all"
         >
           {loading ? "Saving…" : "Save settings"}
         </button>
 
-        {/* Secondary button */}
+        {/* Connect Microsoft */}
         <button
           onClick={connectMicrosoft}
           className="
             inline-flex items-center justify-center
-            rounded-full px-6 py-2.5 text-sm font-medium
-            border border-white/15 bg-white/5 backdrop-blur-lg
-            text-slate-200 
-            hover:border-fuchsia-400/50 hover:bg-white/10
+            rounded-full px-7 py-2.5
+            text-sm font-medium text-slate-200
+            border border-white/15 bg-white/5
+            backdrop-blur-xl
+            hover:border-fuchsia-400/40 hover:bg-white/10
             transition-all
           "
         >
