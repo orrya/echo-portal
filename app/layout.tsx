@@ -9,20 +9,17 @@ export const metadata = {
   description: "Dashboard for the Echo automation assistant.",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }) {
   return (
     <html lang="en" className={`${inter.variable} font-sans`}>
       <body className="relative min-h-screen overflow-x-hidden text-white">
+
         {/* Orrya cinematic gradient background */}
         <div
           className="
             pointer-events-none absolute inset-0 -z-20
-            bg-[radial-gradient(circle_at_22%_8%,rgba(168,110,255,0.35),transparent_62%),
-                radial-gradient(circle_at_88%_78%,rgba(80,180,255,0.22),transparent_70%),
+            bg-[radial-gradient(circle_at_22%_8%,rgba(168,110,255,0.32),transparent_60%),
+                radial-gradient(circle_at_88%_78%,rgba(80,180,255,0.2),transparent_70%),
                 linear-gradient(
                   to_bottom,
                   #0E0B14 0%,
@@ -34,13 +31,13 @@ export default function RootLayout({
           "
         />
 
-        {/* Cinematic orb sitting behind content */}
-        <div className="pointer-events-none absolute left-1/2 top-[40%] -translate-x-1/2 -translate-y-1/2 -z-10">
+        {/* Cinematic Orb */}
+        <div className="absolute left-1/2 top-[43%] -translate-x-1/2 -translate-y-1/2 -z-10">
           <CinematicOrb size={800} />
         </div>
 
-        {/* Subtle vignette */}
-        <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_center,transparent,rgba(0,0,0,0.55))]" />
+        {/* Vignette */}
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,transparent,rgba(0,0,0,0.55))] -z-10" />
 
         {children}
       </body>

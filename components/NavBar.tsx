@@ -27,7 +27,18 @@ export default function NavBar() {
   };
 
   return (
-   <nav className="backdrop-blur-md bg-white/5 border-b border-white/10 text-white flex items-center justify-between px-6 py-4 shadow-xl">
+    <nav
+      className="
+        relative z-20
+        backdrop-blur-xl
+        bg-white/2
+        supports-[backdrop-filter]:bg-white/2
+        border-b border-white/10
+        text-white
+        flex items-center justify-between
+        px-6 py-4
+      "
+    >
       <div className="flex items-center gap-8">
         {/* Brand */}
         <span className="text-xl font-semibold tracking-wide bg-gradient-to-r from-fuchsia-400 via-violet-400 to-sky-400 text-transparent bg-clip-text">
@@ -42,8 +53,12 @@ export default function NavBar() {
               key={name}
               href={href}
               className={`
-                flex items-center gap-2 transition-all 
-                ${active ? "text-fuchsia-300" : "text-slate-300 hover:text-fuchsia-300"}
+                flex items-center gap-2 transition-all
+                ${
+                  active
+                    ? "text-fuchsia-300 drop-shadow-[0_0_6px_rgba(255,0,255,0.25)]"
+                    : "text-slate-300 hover:text-fuchsia-300"
+                }
               `}
             >
               <Icon size={20} />

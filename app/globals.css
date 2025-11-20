@@ -4,11 +4,9 @@
 
 html,
 body {
-  /* Drop bg-graphite so the cinematic background is visible */
   @apply min-h-screen text-white scroll-smooth;
 }
 
-/* Custom scrollbar styling */
 ::-webkit-scrollbar {
   width: 8px;
 }
