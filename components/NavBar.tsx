@@ -30,53 +30,78 @@ export default function NavBar() {
     <nav
       className="
         relative z-30
-        backdrop-blur-xl
-        bg-black/20
-        supports-[backdrop-filter]:bg-black/20
         border-b border-white/10
-        text-white
-        flex items-center justify-between
-        px-6 py-4
-        shadow-[0_0_32px_rgba(0,0,0,0.35)]
+        bg-slate-950/85
+        bg-gradient-to-b from-slate-900/80 to-slate-950/95
+        backdrop-blur-2xl
       "
     >
-      <div className="flex items-center gap-8">
+      <div className="max-w-6xl mx-auto flex items-center justify-between gap-6 px-6 py-3">
         {/* Brand */}
-        <span className="text-xl font-semibold tracking-wide bg-gradient-to-r from-fuchsia-400 via-violet-400 to-sky-400 text-transparent bg-clip-text">
-          Echo Suite
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-xl font-semibold tracking-wide bg-gradient-to-r from-sky-400 via-fuchsia-400 to-violet-300 text-transparent bg-clip-text drop-shadow-[0_0_18px_rgba(56,189,248,0.55)]">
+            Echo Suite
+          </span>
+        </div>
 
         {/* Nav links */}
-        {navItems.map(({ name, href, icon: Icon }) => {
-          const active = pathname === href;
-          return (
-            <Link
-              key={name}
-              href={href}
-              className={`
-                flex items-center gap-2 transition-all
-                ${
-                  active
-                    ? "text-fuchsia-300 drop-shadow-[0_0_6px_rgba(255,0,255,0.25)]"
-                    : "text-slate-300 hover:text-fuchsia-300"
-                }
-              `}
-            >
-              <Icon size={20} />
-              <span className="hidden sm:inline">{name}</span>
-            </Link>
-          );
-        })}
-      </div>
+        <div
+          className="
+            inline-flex items-center gap-1
+            rounded-full
+            bg-white/5
+            border border-white/10
+            shadow-[0_0_40px_rgba(15,23,42,0.9)]
+            px-2 py-1
+          "
+        >
+          {navItems.map(({ name, href, icon: Icon }) => {
+            const active = pathname === href;
 
-      {/* Sign out */}
-      <button
-        onClick={handleSignOut}
-        className="text-slate-300 hover:text-fuchsia-300 transition-colors flex items-center gap-1"
-      >
-        <LogOut size={20} />
-        <span className="hidden sm:inline">Sign out</span>
-      </button>
+            return (
+              <Link
+                key={name}
+                href={href}
+                className={`
+                  group flex items-center gap-2
+                  px-3 py-1.5 text-sm font-medium
+                  rounded-full
+                  transition-all
+                  ${
+                    active
+                      ? "bg-white/20 text-sky-50 shadow-[0_0_20px_rgba(56,189,248,0.55)]"
+                      : "text-slate-200/80 hover:text-sky-100 hover:bg-white/10"
+                  }
+                `}
+              >
+                <Icon
+                  size={18}
+                  className="opacity-80 group-hover:opacity-100"
+                />
+                <span className="hidden sm:inline">{name}</span>
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* Sign out */}
+        <button
+          onClick={handleSignOut}
+          className="
+            inline-flex items-center gap-1
+            rounded-full
+            border border-white/10
+            bg-white/5
+            px-3 py-1.5 text-sm
+            text-slate-200/85
+            hover:text-sky-100 hover:bg-white/10
+            transition-colors shadow-[0_0_20px_rgba(15,23,42,0.8)]
+          "
+        >
+          <LogOut size={18} className="opacity-80" />
+          <span className="hidden sm:inline">Sign out</span>
+        </button>
+      </div>
     </nav>
   );
 }
