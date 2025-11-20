@@ -6,7 +6,7 @@ export default async function SummaryPage() {
 
   if (!user) {
     return (
-      <div className="mx-auto max-w-4xl px-6 py-20 text-center">
+      <div className="mx-auto max-w-4xl px-6 py-16 text-center">
         <p className="text-slate-200/90">
           Please{" "}
           <a className="text-sky-300 underline" href="/auth/sign-in">
@@ -30,16 +30,18 @@ export default async function SummaryPage() {
     .order("summary_date", { ascending: false })
     .order("time_of_day", { ascending: true });
 
-  return (
-    <div className="mx-auto max-w-6xl px-6 py-24 space-y-14">
+  const hasSummaries = summaries && summaries.length > 0;
 
-      {/* EYEBROW */}
-      <p className="text-[11px] font-semibold tracking-[0.28em] text-slate-300/70">
+  return (
+    <div className="mx-auto max-w-6xl px-6 py-16 space-y-12">
+
+      {/* LABEL */}
+      <p className="text-[11px] font-semibold tracking-[0.28em] text-slate-300/80">
         ECHO · DAILY SUMMARIES
       </p>
 
-      {/* HERO BLOCK */}
-      <div className="space-y-4 max-w-3xl">
+      {/* HERO */}
+      <div className="space-y-4 max-w-2xl">
         <h1
           className="
             text-white text-3xl sm:text-4xl lg:text-[2.4rem]
@@ -58,79 +60,112 @@ export default async function SummaryPage() {
           </span>
         </h1>
 
-        <p className="max-w-2xl text-slate-200/95 sm:text-base leading-relaxed">
-          Echo writes a calm AM / PM snapshot of your workday — the meetings,
+        <p className="text-slate-200/95 sm:text-base leading-relaxed max-w-xl">
+          Echo writes a calm AM / PM snapshot of your workday – the meetings,
           threads and decisions that actually changed your trajectory.
         </p>
 
         <p className="text-xs text-slate-400/90 pt-1">
-          {summaries && summaries.length > 0
+          {hasSummaries
             ? `${summaries.length} summaries stored for your account.`
-            : "No summaries have been generated yet — once Echo is connected, they will appear here."}
+            : "No summaries have been generated yet – once Echo is connected, they will appear here."}
         </p>
       </div>
 
-      {/* TODAY’S SUMMARY — GLASS PANEL */}
-      <div
-        className="
-          relative overflow-hidden rounded-2xl
-          backdrop-blur-2xl
-          bg-white/[0.08]
-          border-[1.5px]
-          border-transparent
-          [border-image:linear-gradient(120deg,rgba(244,114,182,0.55),rgba(56,189,248,0.55))1]
-          shadow-[0_20px_70px_rgba(0,0,0,0.65)]
-          p-6 sm:p-8
-          bg-[linear-gradient(to_bottom,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]
-        "
-      >
-        <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(0,0,0,0.45)]" />
+      {/* TODAY SUMMARY PANEL */}
+      <div className="flex flex-col items-center">
+        <div
+          className="
+            w-full max-w-3xl
+            relative overflow-hidden rounded-2xl
+            backdrop-blur-2xl
+            bg-white/[0.08]
+            border-[1.5px]
+            border-transparent
+            [border-image:linear-gradient(120deg,rgba(148,163,255,0.5),rgba(56,189,248,0.5))1]
+            shadow-[0_20px_70px_rgba(0,0,0,0.55)]
+            p-6 sm:p-8
+            bg-[linear-gradient(to_bottom,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]
+          "
+        >
+          {/* Inner glow */}
+          <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(0,0,0,0.45)]" />
 
-        <div className="relative space-y-4">
-          <p className="text-[11px] font-semibold tracking-[0.22em] text-slate-300/80">
-            SUMMARY · TODAY
+          {/* Title */}
+          <p className="text-[11px] font-semibold tracking-[0.22em] text-slate-300/75 mb-4">
+            TODAY · ECHO AM / PM
           </p>
 
-          {summaries && summaries.length > 0 ? (
-            <p className="text-slate-200/95 text-sm leading-relaxed">
-              Your most recent AM / PM summary will appear here.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              <h2 className="text-xl sm:text-2xl font-semibold text-white">
-                No summaries yet
-              </h2>
-              <p className="text-sm text-slate-300/90 leading-relaxed max-w-lg">
-                Connect Microsoft 365 to generate your first AM / PM summary.
-                Echo will begin crafting a calm snapshot of each workday.
+          {/* AM / PM GRID */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* AM */}
+            <div
+              className="
+                rounded-xl p-5
+                bg-white/[0.07]
+                border border-white/10
+                shadow-[0_0_22px_rgba(255,255,255,0.04)]
+                backdrop-blur-xl
+                bg-[linear-gradient(to_bottom,rgba(255,255,255,0.05),rgba(255,255,255,0.015))]
+              "
+            >
+              <h3 className="text-sm font-semibold text-slate-200 tracking-wide mb-1">
+                AM Summary
+              </h3>
+              <p className="text-xs text-slate-400/90">
+                No morning summary yet.
               </p>
             </div>
-          )}
+
+            {/* PM */}
+            <div
+              className="
+                rounded-xl p-5
+                bg-white/[0.07]
+                border border-white/10
+                shadow-[0_0_22px_rgba(255,255,255,0.04)]
+                backdrop-blur-xl
+                bg-[linear-gradient(to_bottom,rgba(255,255,255,0.05),rgba(255,255,255,0.015))]
+              "
+            >
+              <h3 className="text-sm font-semibold text-slate-200 tracking-wide mb-1">
+                PM Summary
+              </h3>
+              <p className="text-xs text-slate-400/90">
+                No evening summary yet.
+              </p>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-slate-400/80 mt-4">
+            Echo will generate AM/PM summaries once connected to Microsoft 365.
+          </p>
         </div>
       </div>
 
-      {/* ARCHIVE — GLASS PANEL */}
-      <div
-        className="
-          relative overflow-hidden rounded-2xl
-          backdrop-blur-2xl
-          bg-white/[0.08]
-          border-[1.5px]
-          border-transparent
-          [border-image:linear-gradient(120deg,rgba(56,189,248,0.55),rgba(244,114,182,0.55))1]
-          shadow-[0_20px_70px_rgba(0,0,0,0.65)]
-          p-6 sm:p-8
-          bg-[linear-gradient(to_bottom,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]
-        "
-      >
-        <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(0,0,0,0.45)]" />
+      {/* ARCHIVE PANEL */}
+      <div className="flex flex-col items-center">
+        <div
+          className="
+            w-full max-w-3xl mt-6
+            relative overflow-hidden rounded-2xl
+            backdrop-blur-2xl
+            bg-white/[0.07]
+            border-[1.5px]
+            border-transparent
+            [border-image:linear-gradient(120deg,rgba(244,114,182,0.45),rgba(148,163,255,0.45))1]
+            shadow-[0_20px_70px_rgba(0,0,0,0.55)]
+            p-6 sm:p-8
+            bg-[linear-gradient(to_bottom,rgba(255,255,255,0.05),rgba(255,255,255,0.02))]
+          "
+        >
+          <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(0,0,0,0.45)]" />
 
-        <div className="relative space-y-4">
-          <p className="text-[11px] font-semibold tracking-[0.22em] text-slate-300/80">
+          <p className="text-[11px] font-semibold tracking-[0.22em] text-slate-300/75 mb-4">
             ARCHIVE · FULL HISTORY
           </p>
 
-          {summaries && summaries.length > 0 ? (
+          {hasSummaries ? (
             <ul className="space-y-4 text-sm sm:text-[15px] text-slate-100/95">
               {summaries.map((summary) => (
                 <li
@@ -153,18 +188,12 @@ export default async function SummaryPage() {
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-slate-300/90 leading-relaxed max-w-xl">
+            <p className="text-sm text-slate-300/95 leading-relaxed">
               Once summaries are enabled, this archive will keep a quiet log of
-              your days — searchable and easy to revisit whenever you need
-              context.
+              your days – searchable and easy to revisit when you need context.
             </p>
           )}
         </div>
-      </div>
-
-      {/* FOOTNOTE */}
-      <div className="pt-6 text-center text-[11px] text-slate-400/80">
-        Designed by Orrya · The Quiet Intelligence Layer.
       </div>
     </div>
   );
