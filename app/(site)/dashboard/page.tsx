@@ -5,13 +5,12 @@ export default function DashboardPage() {
     <div className="mx-auto max-w-6xl px-6 py-12 space-y-10">
       {/* Eyebrow + hero */}
       <div className="space-y-4">
-        {/* Eyebrow label */}
         <p className="text-[11px] font-semibold tracking-[0.28em] text-slate-300/70">
           ECHO · DASHBOARD
         </p>
 
         <div className="flex flex-wrap items-start justify-between gap-4">
-          {/* Title + intro */}
+          {/* Title */}
           <div className="space-y-3 max-w-xl">
             <h1
               className="
@@ -21,30 +20,24 @@ export default function DashboardPage() {
               "
             >
               Quiet tools for{" "}
-              <span
-                className="
-                  bg-[linear-gradient(120deg,#f9a8ff,#c4b5fd,#38bdf8)]
-                  bg-clip-text text-transparent
-                "
-              >
+              <span className="bg-[linear-gradient(120deg,#f9a8ff,#c4b5fd,#38bdf8)] bg-clip-text text-transparent">
                 louder thinking.
               </span>
             </h1>
 
-            {/* Shortened for clarity */}
             <p className="text-sm sm:text-base text-slate-200/90 leading-relaxed">
               Your control surface for summaries, email intelligence, and daily
               signal optimisation.
             </p>
           </div>
 
-          {/* Premium status pill */}
+          {/* Status pill */}
           <div
             className="
               flex items-center gap-2
               rounded-full
               border border-violet-400/30
-              bg-white/5
+              bg-white/10
               px-3 py-1.5
               text-[11px] sm:text-xs
               font-medium text-slate-200
@@ -52,33 +45,28 @@ export default function DashboardPage() {
               shadow-[0_18px_60px_rgba(15,23,42,0.8)]
             "
           >
-            <span
-              className="
-                h-2 w-2 rounded-full
-                bg-gradient-to-r from-fuchsia-400 to-sky-400
-              "
-            />
+            <span className="h-2 w-2 rounded-full bg-gradient-to-r from-fuchsia-400 to-sky-400" />
             <span>Disconnected</span>
           </div>
         </div>
       </div>
 
-      {/* Main intelligence modules */}
+      {/* Main modules */}
       <div className="grid gap-8 md:grid-cols-2">
-        {/* TODAY'S SUMMARY */}
+        {/* SUMMARY CARD */}
         <div
           className="
             relative overflow-hidden rounded-2xl
             backdrop-blur-2xl
-            bg-white/6
+            bg-white/[0.08]
             border-[1.5px]
             border-transparent
-            [border-image:linear-gradient(120deg,rgba(244,114,182,0.5),rgba(56,189,248,0.45))1]
+            [border-image:linear-gradient(120deg,rgba(244,114,182,0.55),rgba(56,189,248,0.55))1]
             shadow-[0_20px_70px_rgba(0,0,0,0.65)]
             p-6 sm:p-7
+            bg-[linear-gradient(to_bottom,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]
           "
         >
-          {/* Soft inner inset */}
           <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(0,0,0,0.45)]" />
 
           <div className="relative space-y-4">
@@ -90,7 +78,7 @@ export default function DashboardPage() {
               <h2 className="text-xl sm:text-2xl font-semibold text-white">
                 Today&apos;s Summary
               </h2>
-              <p className="text-sm text-slate-200/85">
+              <p className="text-sm text-slate-200/90">
                 Echo will generate a calm AM/PM digest once Microsoft 365 is connected.
               </p>
             </div>
@@ -120,12 +108,13 @@ export default function DashboardPage() {
           className="
             relative overflow-hidden rounded-2xl
             backdrop-blur-2xl
-            bg-white/6
+            bg-white/[0.08]
             border-[1.5px]
             border-transparent
-            [border-image:linear-gradient(120deg,rgba(56,189,248,0.5),rgba(244,114,182,0.45))1]
+            [border-image:linear-gradient(120deg,rgba(56,189,248,0.55),rgba(244,114,182,0.55))1]
             shadow-[0_20px_70px_rgba(0,0,0,0.65)]
             p-6 sm:p-7
+            bg-[linear-gradient(to_bottom,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]
           "
         >
           <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(0,0,0,0.45)]" />
@@ -139,30 +128,54 @@ export default function DashboardPage() {
               <h2 className="text-xl sm:text-2xl font-semibold text-white">
                 Email Intelligence
               </h2>
-              <p className="text-sm text-slate-200/85">
+              <p className="text-sm text-slate-200/90">
                 Echo classifies messages into action, follow-up, or noise.
               </p>
             </div>
 
+            {/* SIGNAL BANDS */}
             <div className="mt-4 grid gap-2 text-sm text-slate-200/95">
-              {[
-                { label: "Action", color: "rgba(244,114,182,0.35)" },
-                { label: "Follow-up", color: "rgba(129,140,248,0.28)" },
-                { label: "Noise", color: "rgba(56,189,248,0.25)" },
-              ].map(({ label, color }) => (
-                <div
-                  key={label}
-                  className="flex items-center justify-between rounded-xl border border-white/10 bg-slate-900/30 px-3 py-2"
-                  style={{
-                    background: `linear-gradient(to right, ${color}, transparent)`,
-                  }}
-                >
-                  <span>{label}</span>
-                  <span className="text-slate-400/90 text-xs">
-                    0 threads — waiting for sync
-                  </span>
-                </div>
-              ))}
+              {/* ACTION */}
+              <div
+                className="
+                  flex items-center justify-between rounded-xl px-3 py-2 border border-white/10
+                  bg-slate-900/40
+                  shadow-[0_-2px_12px_rgba(244,114,182,0.25)]
+                "
+              >
+                <span>Action</span>
+                <span className="text-slate-400/90 text-xs">
+                  0 threads — waiting for sync
+                </span>
+              </div>
+
+              {/* FOLLOW-UP */}
+              <div
+                className="
+                  flex items-center justify-between rounded-xl px-3 py-2 border border-white/10
+                  bg-slate-900/40
+                  shadow-[0_-2px_12px_rgba(129,140,248,0.26)]
+                "
+              >
+                <span>Follow-up</span>
+                <span className="text-slate-400/90 text-xs">
+                  0 threads — waiting for sync
+                </span>
+              </div>
+
+              {/* NOISE */}
+              <div
+                className="
+                  flex items-center justify-between rounded-xl px-3 py-2 border border-white/10
+                  bg-slate-900/40
+                  shadow-[0_-2px_12px_rgba(56,189,248,0.28)]
+                "
+              >
+                <span>Noise</span>
+                <span className="text-slate-400/90 text-xs">
+                  0 threads — waiting for sync
+                </span>
+              </div>
 
               <p className="pt-1 text-[11px] text-slate-400/85">
                 This view becomes your triaged inbox once live.
