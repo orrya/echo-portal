@@ -27,7 +27,7 @@ export default function NavBar() {
   };
 
   return (
-    <nav className="backdrop-blur-md bg-black/20 border-b border-white/10 text-white flex items-center justify-between px-6 py-4 shadow-[0_0_32px_rgba(0,0,0,0.4)]">
+   <nav className="backdrop-blur-md bg-white/5 border-b border-white/10 text-white flex items-center justify-between px-6 py-4 shadow-xl">
       <div className="flex items-center gap-8">
         {/* Brand */}
         <span className="text-xl font-semibold tracking-wide bg-gradient-to-r from-fuchsia-400 via-violet-400 to-sky-400 text-transparent bg-clip-text">

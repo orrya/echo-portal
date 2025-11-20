@@ -4,8 +4,8 @@
 
 html,
 body {
-  @apply text-white min-h-screen scroll-smooth;
-  background-color: black; /* Fallback for non-site pages */
+  /* Drop bg-graphite so the cinematic background is visible */
+  @apply min-h-screen text-white scroll-smooth;
 }
 
 /* Custom scrollbar styling */

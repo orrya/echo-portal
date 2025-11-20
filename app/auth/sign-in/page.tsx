@@ -28,7 +28,7 @@ export default function SignInPage() {
 
       {/* Content */}
       <div className="relative z-10 flex min-h-screen items-center justify-center px-4">
-        <div className="w-full max-w-md rounded-3xl border border-white/8 bg-black/40 p-8 shadow-[0_0_40px_rgba(15,23,42,0.9)] backdrop-blur-xl">
+        <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl p-8 shadow-[0_0_40px_rgba(0,0,0,0.4)]">
           {/* Brand label */}
           <p className="mb-2 text-[11px] font-semibold tracking-[0.28em] text-slate-300/90">
             ORRYA · QUIET INTELLIGENCE
