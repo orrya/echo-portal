@@ -4,7 +4,8 @@
 
 html,
 body {
-  @apply bg-graphite text-white min-h-screen scroll-smooth;
+  @apply text-white min-h-screen scroll-smooth;
+  background-color: black; /* Fallback for non-site pages */
 }
 
 /* Custom scrollbar styling */
