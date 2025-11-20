@@ -1,35 +1,41 @@
 "use client";
 
-import { motion } from "framer-motion";
-
 export default function DashboardPage() {
   return (
-    <div className="text-slate-200 space-y-8">
+    <div className="space-y-10">
+      {/* Page Header */}
+      <div className="space-y-3">
+        <h1 className="text-5xl font-bold bg-gradient-to-r from-fuchsia-400 via-violet-400 to-sky-400 text-transparent bg-clip-text drop-shadow-lg">
+          Dashboard
+        </h1>
 
-      {/* Branded headline */}
-      <motion.h1
-        className="
-          text-4xl sm:text-5xl font-semibold
-          bg-gradient-to-r from-fuchsia-400 via-violet-400 to-sky-400
-          bg-clip-text text-transparent
-          drop-shadow-[0_0_18px_rgba(129,140,248,0.35)]
-        "
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.7 }}
-      >
-        Dashboard
-      </motion.h1>
+        <p className="text-lg text-slate-300">
+          Welcome back. Your personalised Echo insights will appear here.
+        </p>
+      </div>
 
-      <p className="text-lg opacity-90">
-        You are logged in 🎉
-      </p>
+      {/* Placeholder cards (until live data flows in) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
 
-      <p className="text-slate-300 max-w-xl leading-relaxed">
-        Your personalised Echo insights will appear here.  
-        This is your control panel for summaries, email intelligence and daily optimisation.
-      </p>
+        <div className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 shadow-xl">
+          <h2 className="text-2xl font-semibold text-fuchsia-300 mb-2">
+            Today&apos;s Summary
+          </h2>
+          <p className="text-slate-400">
+            Your daily summary will appear here once connected to n8n.
+          </p>
+        </div>
 
+        <div className="p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 shadow-xl">
+          <h2 className="text-2xl font-semibold text-fuchsia-300 mb-2">
+            Email Intelligence
+          </h2>
+          <p className="text-slate-400">
+            Your email classifications, priorities & insights will show here.
+          </p>
+        </div>
+
+      </div>
     </div>
   );
 }
