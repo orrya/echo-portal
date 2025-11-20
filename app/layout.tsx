@@ -1,4 +1,3 @@
-// app/layout.tsx
 import "./globals.css";
 import { Inter } from "next/font/google";
 import CinematicOrb from "@/components/CinematicOrb";
@@ -10,31 +9,29 @@ export const metadata = {
   description: "Dashboard for the Echo automation assistant.",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} font-sans`}>
-      <body className="relative min-h-screen overflow-x-hidden text-white">
-        {/* Orrya cinematic gradient background */}
+      <body className="relative min-h-screen overflow-x-hidden text-white bg-[#060b1b]">
+        
+        {/* Orrya-style deep gradient */}
         <div
           className="
             pointer-events-none absolute inset-0 -z-20
-            bg-[radial-gradient(circle_at_22%_8%,rgba(168,110,255,0.35),transparent_62%),
-            radial-gradient(circle_at_88%_78%,rgba(80,180,255,0.22),transparent_70%),
-            linear-gradient(to_bottom,#0E0B14_0%,#120F1C_20%,#1A1528_46%,#0F0D18_72%,#09070F_100%)]
+            bg-gradient-to-br
+            from-[#0a0f24]
+            via-[#0b112d]
+            to-[#020611]
           "
         />
 
         {/* Cinematic orb */}
-        <div className="pointer-events-none absolute left-1/2 top-[40%] -translate-x-1/2 -translate-y-1/2 -z-10">
-          <CinematicOrb size={800} />
+        <div className="pointer-events-none absolute left-1/2 top-[38%] -translate-x-1/2 -translate-y-1/2 -z-10 opacity-[0.35]">
+          <CinematicOrb size={900} />
         </div>
 
-        {/* Subtle vignette */}
-        <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_center,transparent,rgba(0,0,0,0.55))]" />
+        {/* Soft vignette */}
+        <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_center,transparent,rgba(0,0,0,0.75))]" />
 
         {children}
       </body>
