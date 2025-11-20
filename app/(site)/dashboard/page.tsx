@@ -2,7 +2,7 @@
 
 export default function DashboardPage() {
   return (
-    <div className="mx-auto max-w-6xl px-6 py-12 space-y-10">
+    <div className="mx-auto max-w-6xl px-6 py-10 space-y-8">
       {/* Eyebrow + hero */}
       <div className="space-y-4">
         <p className="text-[11px] font-semibold tracking-[0.28em] text-slate-300/70">
@@ -36,17 +36,23 @@ export default function DashboardPage() {
             className="
               flex items-center gap-2
               rounded-full
-              border border-violet-400/30
-              bg-white/10
-              px-3 py-1.5
+              border border-white/15
+              bg-white/[0.06]
+              px-3.5 py-1.5
               text-[11px] sm:text-xs
               font-medium text-slate-200
               backdrop-blur-xl
-              shadow-[0_18px_60px_rgba(15,23,42,0.8)]
+              shadow-[0_18px_60px_rgba(15,23,42,0.85)]
             "
           >
-            <span className="h-2 w-2 rounded-full bg-gradient-to-r from-fuchsia-400 to-sky-400" />
-            <span>Disconnected</span>
+            <span
+              className="
+                h-2 w-2 rounded-full
+                bg-gradient-to-r from-fuchsia-400 via-violet-400 to-sky-400
+                shadow-[0_0_10px_rgba(168,85,247,0.9)]
+              "
+            />
+            <span>Disconnected — connect Microsoft 365 in Settings.</span>
           </div>
         </div>
       </div>
@@ -58,16 +64,17 @@ export default function DashboardPage() {
           className="
             relative overflow-hidden rounded-2xl
             backdrop-blur-2xl
-            bg-white/[0.08]
+            bg-white/[0.12]
             border-[1.5px]
             border-transparent
-            [border-image:linear-gradient(120deg,rgba(244,114,182,0.55),rgba(56,189,248,0.55))1]
-            shadow-[0_20px_70px_rgba(0,0,0,0.65)]
+            [border-image:linear-gradient(120deg,rgba(244,114,182,0.6),rgba(56,189,248,0.6))1]
+            shadow-[0_24px_80px_rgba(15,23,42,0.95)]
             p-6 sm:p-7
-            bg-[linear-gradient(to_bottom,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]
+            bg-[linear-gradient(to_bottom,rgba(255,255,255,0.10),rgba(255,255,255,0.03))]
           "
         >
-          <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(0,0,0,0.45)]" />
+          {/* Inner vignette */}
+          <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(0,0,0,0.55)]" />
 
           <div className="relative space-y-4">
             <p className="text-[11px] font-semibold tracking-[0.22em] text-slate-300/80">
@@ -79,14 +86,22 @@ export default function DashboardPage() {
                 Today&apos;s Summary
               </h2>
               <p className="text-sm text-slate-200/90">
-                Echo will generate a calm AM/PM digest once Microsoft 365 is connected.
+                Echo will generate a calm AM/PM digest once Microsoft 365 is
+                connected.
               </p>
             </div>
 
             <div className="mt-3 grid gap-3 text-sm text-slate-200/95">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-slate-300/90">Status</span>
-                <span className="rounded-full border border-slate-500/40 bg-slate-900/40 px-2.5 py-1 text-[11px] uppercase tracking-[0.13em]">
+                <span
+                  className="
+                    rounded-full border border-slate-500/40
+                    bg-slate-900/60
+                    px-2.5 py-1
+                    text-[11px] uppercase tracking-[0.13em]
+                  "
+                >
                   Waiting for first sync
                 </span>
               </div>
@@ -97,7 +112,8 @@ export default function DashboardPage() {
               </div>
 
               <p className="pt-1 text-[11px] text-slate-400/85">
-                When active, you’ll get structured clarity for your day.
+                When active, you’ll get structured clarity for your day, not a
+                wall of messages.
               </p>
             </div>
           </div>
@@ -108,16 +124,17 @@ export default function DashboardPage() {
           className="
             relative overflow-hidden rounded-2xl
             backdrop-blur-2xl
-            bg-white/[0.08]
+            bg-white/[0.12]
             border-[1.5px]
             border-transparent
-            [border-image:linear-gradient(120deg,rgba(56,189,248,0.55),rgba(244,114,182,0.55))1]
-            shadow-[0_20px_70px_rgba(0,0,0,0.65)]
+            [border-image:linear-gradient(120deg,rgba(56,189,248,0.6),rgba(244,114,182,0.6))1]
+            shadow-[0_24px_80px_rgba(15,23,42,0.95)]
             p-6 sm:p-7
-            bg-[linear-gradient(to_bottom,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]
+            bg-[linear-gradient(to_bottom,rgba(255,255,255,0.10),rgba(255,255,255,0.03))]
           "
         >
-          <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(0,0,0,0.45)]" />
+          {/* Inner vignette */}
+          <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(0,0,0,0.55)]" />
 
           <div className="relative space-y-4">
             <p className="text-[11px] font-semibold tracking-[0.22em] text-slate-300/80">
@@ -129,22 +146,23 @@ export default function DashboardPage() {
                 Email Intelligence
               </h2>
               <p className="text-sm text-slate-200/90">
-                Echo classifies messages into action, follow-up, or noise.
+                Echo classifies messages into action, follow-up, or noise so you
+                see conversations, not clutter.
               </p>
             </div>
 
             {/* SIGNAL BANDS */}
-            <div className="mt-4 grid gap-2 text-sm text-slate-200/95">
+            <div className="mt-4 grid gap-2.5 text-sm text-slate-200/95">
               {/* ACTION */}
               <div
                 className="
-                  flex items-center justify-between rounded-xl px-3 py-2 border border-white/10
-                  bg-slate-900/40
-                  shadow-[0_-2px_12px_rgba(244,114,182,0.25)]
+                  flex items-center justify-between rounded-xl px-3.5 py-2.5
+                  bg-[linear-gradient(to_right,rgba(244,114,182,0.22),rgba(15,23,42,0.9))]
+                  shadow-[0_-3px_18px_rgba(244,114,182,0.55)]
                 "
               >
-                <span>Action</span>
-                <span className="text-slate-400/90 text-xs">
+                <span className="font-medium">Action</span>
+                <span className="text-slate-200/85 text-xs">
                   0 threads — waiting for sync
                 </span>
               </div>
@@ -152,13 +170,13 @@ export default function DashboardPage() {
               {/* FOLLOW-UP */}
               <div
                 className="
-                  flex items-center justify-between rounded-xl px-3 py-2 border border-white/10
-                  bg-slate-900/40
-                  shadow-[0_-2px_12px_rgba(129,140,248,0.26)]
+                  flex items-center justify-between rounded-xl px-3.5 py-2.5
+                  bg-[linear-gradient(to_right,rgba(129,140,248,0.22),rgba(15,23,42,0.9))]
+                  shadow-[0_-3px_18px_rgba(129,140,248,0.55)]
                 "
               >
-                <span>Follow-up</span>
-                <span className="text-slate-400/90 text-xs">
+                <span className="font-medium">Follow-up</span>
+                <span className="text-slate-200/85 text-xs">
                   0 threads — waiting for sync
                 </span>
               </div>
@@ -166,19 +184,20 @@ export default function DashboardPage() {
               {/* NOISE */}
               <div
                 className="
-                  flex items-center justify-between rounded-xl px-3 py-2 border border-white/10
-                  bg-slate-900/40
-                  shadow-[0_-2px_12px_rgba(56,189,248,0.28)]
+                  flex items-center justify-between rounded-xl px-3.5 py-2.5
+                  bg-[linear-gradient(to_right,rgba(56,189,248,0.22),rgba(15,23,42,0.9))]
+                  shadow-[0_-3px_18px_rgba(56,189,248,0.55)]
                 "
               >
-                <span>Noise</span>
-                <span className="text-slate-400/90 text-xs">
+                <span className="font-medium">Noise</span>
+                <span className="text-slate-200/85 text-xs">
                   0 threads — waiting for sync
                 </span>
               </div>
 
               <p className="pt-1 text-[11px] text-slate-400/85">
-                This view becomes your triaged inbox once live.
+                Once live, this becomes your triaged inbox — Echo keeps the
+                signal bands full and the noise band heavy.
               </p>
             </div>
           </div>
