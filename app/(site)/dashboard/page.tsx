@@ -1,7 +1,8 @@
 "use client";
 
-export default function DashboardPage() {  return (
-    <div className="mx-auto max-w-6xl px-6 py-14 space-y-10">
+export default function DashboardPage() {
+  return (
+    <div className="mx-auto max-w-6xl px-6 py-12 space-y-10">
       {/* Eyebrow + hero */}
       <div className="space-y-4">
         {/* Eyebrow label */}
@@ -30,41 +31,55 @@ export default function DashboardPage() {  return (
               </span>
             </h1>
 
+            {/* Shortened for clarity */}
             <p className="text-sm sm:text-base text-slate-200/90 leading-relaxed">
-              This is your control panel for summaries, email intelligence and
-              daily optimisation. Connect Microsoft 365 to start seeing Echo’s
-              live signals for your day.
+              Your control surface for summaries, email intelligence, and daily
+              signal optimisation.
             </p>
           </div>
 
-          {/* Connection status pill */}
-          <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] sm:text-xs font-medium text-slate-200/90 backdrop-blur-md shadow-[0_18px_60px_rgba(15,23,42,0.9)]">
-            <span className="h-2 w-2 rounded-full bg-slate-400/90" />
+          {/* Premium status pill */}
+          <div
+            className="
+              flex items-center gap-2
+              rounded-full
+              border border-violet-400/30
+              bg-white/5
+              px-3 py-1.5
+              text-[11px] sm:text-xs
+              font-medium text-slate-200
+              backdrop-blur-xl
+              shadow-[0_18px_60px_rgba(15,23,42,0.8)]
+            "
+          >
+            <span
+              className="
+                h-2 w-2 rounded-full
+                bg-gradient-to-r from-fuchsia-400 to-sky-400
+              "
+            />
             <span>Disconnected</span>
-            <span className="hidden sm:inline text-slate-400/85">
-              – connect Microsoft 365 in Settings
-            </span>
           </div>
         </div>
       </div>
 
       {/* Main intelligence modules */}
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-8 md:grid-cols-2">
         {/* TODAY'S SUMMARY */}
         <div
           className="
             relative overflow-hidden rounded-2xl
-            border border-white/10 bg-white/5
-            backdrop-blur-xl
-            shadow-[0_24px_80px_rgba(15,23,42,0.9)]
+            backdrop-blur-2xl
+            bg-white/6
+            border-[1.5px]
+            border-transparent
+            [border-image:linear-gradient(120deg,rgba(244,114,182,0.5),rgba(56,189,248,0.45))1]
+            shadow-[0_20px_70px_rgba(0,0,0,0.65)]
             p-6 sm:p-7
           "
         >
-          {/* Accent line */}
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-fuchsia-400 via-violet-400 to-sky-400 opacity-80" />
-
-          {/* Soft radial highlight */}
-          <div className="pointer-events-none absolute -top-24 -left-10 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(244,114,182,0.28),transparent_70%)] opacity-70" />
+          {/* Soft inner inset */}
+          <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(0,0,0,0.45)]" />
 
           <div className="relative space-y-4">
             <p className="text-[11px] font-semibold tracking-[0.22em] text-slate-300/80">
@@ -76,28 +91,25 @@ export default function DashboardPage() {  return (
                 Today&apos;s Summary
               </h2>
               <p className="text-sm text-slate-200/85">
-                Echo will generate a calm AM / PM digest of your inbox,
-                meetings and tasks once your Microsoft 365 account is
-                connected.
+                Echo will generate a calm AM/PM digest once Microsoft 365 is connected.
               </p>
             </div>
 
-            <div className="mt-3 grid gap-3 text-sm text-slate-200/90">
+            <div className="mt-3 grid gap-3 text-sm text-slate-200/95">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-slate-300/90">Status</span>
-                <span className="rounded-full border border-slate-500/50 bg-slate-900/40 px-2.5 py-1 text-[11px] uppercase tracking-[0.16em] text-slate-200/90">
+                <span className="rounded-full border border-slate-500/40 bg-slate-900/40 px-2.5 py-1 text-[11px] uppercase tracking-[0.13em]">
                   Waiting for first sync
                 </span>
               </div>
 
               <div className="flex items-center justify-between gap-3">
-                <span className="text-slate-300/80">Next summary window</span>
-                <span className="text-slate-100/95">Today · 8:00 AM & 5:00 PM</span>
+                <span className="text-slate-300/80">Next window</span>
+                <span className="text-slate-100/95">8:00 AM / 5:00 PM</span>
               </div>
 
               <p className="pt-1 text-[11px] text-slate-400/85">
-                Once live, you’ll see a single, quiet view of what actually
-                matters today.
+                When active, you’ll get structured clarity for your day.
               </p>
             </div>
           </div>
@@ -107,17 +119,16 @@ export default function DashboardPage() {  return (
         <div
           className="
             relative overflow-hidden rounded-2xl
-            border border-white/10 bg-white/5
-            backdrop-blur-xl
-            shadow-[0_24px_80px_rgba(15,23,42,0.9)]
+            backdrop-blur-2xl
+            bg-white/6
+            border-[1.5px]
+            border-transparent
+            [border-image:linear-gradient(120deg,rgba(56,189,248,0.5),rgba(244,114,182,0.45))1]
+            shadow-[0_20px_70px_rgba(0,0,0,0.65)]
             p-6 sm:p-7
           "
         >
-          {/* Accent line (cooler hue) */}
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-sky-400 via-violet-400 to-fuchsia-400 opacity-80" />
-
-          {/* Soft radial highlight */}
-          <div className="pointer-events-none absolute -top-24 -right-10 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(56,189,248,0.26),transparent_70%)] opacity-80" />
+          <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(0,0,0,0.45)]" />
 
           <div className="relative space-y-4">
             <p className="text-[11px] font-semibold tracking-[0.22em] text-slate-300/80">
@@ -129,34 +140,32 @@ export default function DashboardPage() {  return (
                 Email Intelligence
               </h2>
               <p className="text-sm text-slate-200/85">
-                Echo classifies each message into action, follow-up or noise,
-                so your inbox becomes a signal-first control surface.
+                Echo classifies messages into action, follow-up, or noise.
               </p>
             </div>
 
-            <div className="mt-3 grid gap-2 text-sm text-slate-200/95">
-              <div className="flex items-center justify-between rounded-xl border border-white/10 bg-slate-900/40 px-3 py-2">
-                <span className="text-slate-200/95">Action</span>
-                <span className="text-slate-400/90 text-xs">
-                  0 threads — connect to start surfacing priorities
-                </span>
-              </div>
-              <div className="flex items-center justify-between rounded-xl border border-white/5 bg-slate-900/30 px-3 py-2">
-                <span className="text-slate-200/95">Follow-up</span>
-                <span className="text-slate-400/90 text-xs">
-                  0 threads waiting for your response
-                </span>
-              </div>
-              <div className="flex items-center justify-between rounded-xl border border-white/5 bg-slate-900/20 px-3 py-2">
-                <span className="text-slate-200/95">Noise</span>
-                <span className="text-slate-400/90 text-xs">
-                  Noise suppression will appear here once live
-                </span>
-              </div>
+            <div className="mt-4 grid gap-2 text-sm text-slate-200/95">
+              {[
+                { label: "Action", color: "rgba(244,114,182,0.35)" },
+                { label: "Follow-up", color: "rgba(129,140,248,0.28)" },
+                { label: "Noise", color: "rgba(56,189,248,0.25)" },
+              ].map(({ label, color }) => (
+                <div
+                  key={label}
+                  className="flex items-center justify-between rounded-xl border border-white/10 bg-slate-900/30 px-3 py-2"
+                  style={{
+                    background: `linear-gradient(to right, ${color}, transparent)`,
+                  }}
+                >
+                  <span>{label}</span>
+                  <span className="text-slate-400/90 text-xs">
+                    0 threads — waiting for sync
+                  </span>
+                </div>
+              ))}
 
               <p className="pt-1 text-[11px] text-slate-400/85">
-                When connected, this view becomes your calm, triaged inbox —
-                without leaving Outlook.
+                This view becomes your triaged inbox once live.
               </p>
             </div>
           </div>
