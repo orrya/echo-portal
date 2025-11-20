@@ -29,14 +29,15 @@ export default function NavBar() {
   return (
     <nav
       className="
-        relative z-20
+        relative z-30
         backdrop-blur-xl
-        bg-white/2
-        supports-[backdrop-filter]:bg-white/2
+        bg-black/20
+        supports-[backdrop-filter]:bg-black/20
         border-b border-white/10
         text-white
         flex items-center justify-between
         px-6 py-4
+        shadow-[0_0_32px_rgba(0,0,0,0.35)]
       "
     >
       <div className="flex items-center gap-8">
