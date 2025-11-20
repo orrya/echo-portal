@@ -4,23 +4,23 @@ import { Zap, Mail, Bell } from "lucide-react";
 
 export default function DashboardPage() {
   return (
-    <div className="mx-auto max-w-6xl px-6 py-12 space-y-10">
+    <div className="mx-auto max-w-6xl px-6 py-10 space-y-10">
 
       {/* Eyebrow + hero */}
-      <div className="space-y-4">
+      <div className="space-y-4 pt-6">
         <p className="text-[11px] font-semibold tracking-[0.28em] text-slate-300/70">
           ECHO · DASHBOARD
         </p>
 
         <div className="flex flex-wrap items-start justify-between gap-4">
 
-          {/* TITLE */}
-          <div className="space-y-3 max-w-xl">
+          {/* Title */}
+          <div className="space-y-3 max-w-xl translate-y-[6px]">
             <h1
               className="
                 text-white text-3xl sm:text-4xl lg:text-[2.25rem]
                 font-semibold leading-tight
-                drop-shadow-[0_0_18px_rgba(0,0,0,0.55)]
+                drop-shadow-[0_0_16px_rgba(0,0,0,0.45)]
               "
             >
               Quiet tools for{" "}
@@ -34,51 +34,45 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {/* IMPROVED STATUS BADGE */}
+          {/* Status pill */}
           <div
             className="
-              flex items-center gap-2 rounded-full
+              flex items-center gap-2
+              rounded-full
+              border border-white/20
+              bg-white/[0.06]
               px-3 py-1.5
-              text-[10px] sm:text-[11px] font-medium
-              text-slate-200/90
-              border border-white/12
-              bg-white/[0.05]
-              backdrop-blur-2xl
-              shadow-[0_0_22px_rgba(168,85,247,0.18)]
+              text-[11px] sm:text-xs
+              font-medium text-slate-200
+              backdrop-blur-xl
+              shadow-[0_0_14px_rgba(168,85,247,0.28)]
             "
           >
-            <span
-              className="
-                h-2 w-2 rounded-full
-                bg-gradient-to-r from-fuchsia-400 via-violet-400 to-sky-400
-                shadow-[0_0_8px_rgba(168,85,247,0.8)]
-              "
-            />
+            <span className="h-2 w-2 rounded-full bg-gradient-to-r from-fuchsia-400 to-sky-400 shadow-[0_0_8px_rgba(168,85,247,0.55)]" />
             <span>Disconnected</span>
           </div>
         </div>
       </div>
 
-      {/* MAIN MODULES */}
+      {/* Main modules */}
       <div className="grid gap-6 md:grid-cols-2">
 
-        {/* SUMMARY PANEL */}
+        {/* SUMMARY CARD */}
         <div
           className="
             relative overflow-hidden rounded-2xl
             backdrop-blur-2xl
             bg-white/[0.09]
-            border border-white/10
-            [box-shadow:0_0_0_1px_rgba(255,255,255,0.04)_inset,0_20px_70px_rgba(0,0,0,0.65)]
-            [border-image:linear-gradient(120deg,rgba(244,114,182,0.55),rgba(56,189,248,0.55))1]
+            border border-white/14
+            shadow-[0_20px_70px_rgba(0,0,0,0.58)]
+            hover:shadow-[0_24px_90px_rgba(0,0,0,0.7)]
+            transition-all
             p-6 sm:p-7
-            bg-[linear-gradient(to_bottom,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]
-            transition-all duration-300 hover:translate-y-[-1px]
-            hover:shadow-[0_28px_90px_rgba(0,0,0,0.55)]
+            bg-[linear-gradient(to_bottom,rgba(255,255,255,0.07),rgba(255,255,255,0.02))]
           "
         >
-          {/* subtle chroma wash */}
-          <div className="absolute inset-0 rounded-2xl pointer-events-none bg-[radial-gradient(circle_at_top_left,rgba(168,85,247,0.05),transparent_70%)]" />
+          {/* FIX: inner haze now properly rounded */}
+          <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(255,255,255,0.04)]" />
 
           <div className="relative space-y-4">
             <p className="text-[11px] font-semibold tracking-[0.22em] text-slate-300/80">
@@ -95,13 +89,17 @@ export default function DashboardPage() {
             </div>
 
             <div className="mt-3 grid gap-3 text-sm text-slate-200/95">
+
+              {/* STATUS */}
               <div className="flex items-center justify-between gap-3">
                 <span className="text-slate-300/90">Status</span>
-                <span className="rounded-full border border-slate-500/40 bg-slate-900/40 px-2.5 py-1 text-[11px] uppercase tracking-[0.13em]">
+                <span className="rounded-full border border-slate-500/40 bg-slate-900/40 px-2.5 py-1
+                  text-[11px] uppercase tracking-[0.13em]">
                   Waiting for first sync
                 </span>
               </div>
 
+              {/* NEXT WINDOW */}
               <div className="flex items-center justify-between gap-3">
                 <span className="text-slate-300/80">Next window</span>
                 <span className="text-slate-100/95">8:00 AM / 5:00 PM</span>
@@ -110,6 +108,7 @@ export default function DashboardPage() {
               <p className="pt-1 text-[11px] text-slate-400/85">
                 When active, you’ll get structured clarity for your day.
               </p>
+
             </div>
           </div>
         </div>
@@ -120,17 +119,16 @@ export default function DashboardPage() {
             relative overflow-hidden rounded-2xl
             backdrop-blur-2xl
             bg-white/[0.09]
-            border border-white/10
-            [box-shadow:0_0_0_1px_rgba(255,255,255,0.04)_inset,0_20px_70px_rgba(0,0,0,0.65)]
-            [border-image:linear-gradient(120deg,rgba(56,189,248,0.55),rgba(244,114,182,0.55))1]
+            border border-white/14
+            shadow-[0_20px_70px_rgba(0,0,0,0.58)]
+            hover:shadow-[0_24px_90px_rgba(0,0,0,0.7)]
+            transition-all
             p-6 sm:p-7
-            bg-[linear-gradient(to_bottom,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]
-            transition-all duration-300 hover:translate-y-[-1px]
-            hover:shadow-[0_28px_90px_rgba(0,0,0,0.55)]
+            bg-[linear-gradient(to_bottom,rgba(255,255,255,0.07),rgba(255,255,255,0.02))]
           "
         >
-          {/* chroma wash */}
-          <div className="absolute inset-0 rounded-2xl pointer-events-none bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.05),transparent_70%)]" />
+          {/* FIX: rounded haze layer */}
+          <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(255,255,255,0.04)]" />
 
           <div className="relative space-y-4">
             <p className="text-[11px] font-semibold tracking-[0.22em] text-slate-300/80">
@@ -152,15 +150,16 @@ export default function DashboardPage() {
               {/* ACTION */}
               <div
                 className="
-                  flex items-center justify-between rounded-xl px-3 py-2
-                  border border-white/10 bg-slate-900/40
+                  flex items-center justify-between rounded-xl px-3 py-2 border border-white/10
+                  bg-slate-900/40
                   shadow-[0_-2px_12px_rgba(244,114,182,0.25)]
+                  hover:bg-slate-900/60 transition
                 "
               >
-                <div className="flex items-center gap-2">
-                  <Zap className="h-3.5 w-3.5 text-fuchsia-300" />
-                  <span>Action</span>
-                </div>
+                <span className="flex items-center gap-1">
+                  <Zap size={14} className="text-fuchsia-400 opacity-80" />
+                  Action
+                </span>
                 <span className="text-slate-400/90 text-xs">
                   0 threads — waiting for sync
                 </span>
@@ -169,15 +168,16 @@ export default function DashboardPage() {
               {/* FOLLOW-UP */}
               <div
                 className="
-                  flex items-center justify-between rounded-xl px-3 py-2
-                  border border-white/10 bg-slate-900/40
+                  flex items-center justify-between rounded-xl px-3 py-2 border border-white/10
+                  bg-slate-900/40
                   shadow-[0_-2px_12px_rgba(129,140,248,0.26)]
+                  hover:bg-slate-900/60 transition
                 "
               >
-                <div className="flex items-center gap-2">
-                  <Mail className="h-3.5 w-3.5 text-indigo-300" />
-                  <span>Follow-up</span>
-                </div>
+                <span className="flex items-center gap-1">
+                  <Mail size={14} className="text-violet-300 opacity-80" />
+                  Follow-up
+                </span>
                 <span className="text-slate-400/90 text-xs">
                   0 threads — waiting for sync
                 </span>
@@ -186,15 +186,16 @@ export default function DashboardPage() {
               {/* NOISE */}
               <div
                 className="
-                  flex items-center justify-between rounded-xl px-3 py-2
-                  border border-white/10 bg-slate-900/40
+                  flex items-center justify-between rounded-xl px-3 py-2 border border-white/10
+                  bg-slate-900/40
                   shadow-[0_-2px_12px_rgba(56,189,248,0.28)]
+                  hover:bg-slate-900/60 transition
                 "
               >
-                <div className="flex items-center gap-2">
-                  <Bell className="h-3.5 w-3.5 text-sky-300" />
-                  <span>Noise</span>
-                </div>
+                <span className="flex items-center gap-1">
+                  <Bell size={14} className="text-sky-300 opacity-80" />
+                  Noise
+                </span>
                 <span className="text-slate-400/90 text-xs">
                   0 threads — waiting for sync
                 </span>
@@ -203,12 +204,13 @@ export default function DashboardPage() {
               <p className="pt-1 text-[11px] text-slate-400/85">
                 This view becomes your triaged inbox once live.
               </p>
+
             </div>
           </div>
         </div>
       </div>
 
-      {/* FOOTNOTE */}
+      {/* Footnote */}
       <div className="pt-4 text-center text-[11px] text-slate-400/80">
         Designed by Orrya · The Quiet Intelligence Layer.
       </div>
