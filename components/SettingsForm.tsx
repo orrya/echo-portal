@@ -8,7 +8,6 @@ export default function SettingsForm() {
   const [loading, setLoading] = useState(false);
   const [autoReply, setAutoReply] = useState(false);
 
-  // Load settings
   useEffect(() => {
     const fetchProfile = async () => {
       const {
@@ -31,7 +30,6 @@ export default function SettingsForm() {
     fetchProfile();
   }, []);
 
-  // Save settings
   const saveSettings = async () => {
     setLoading(true);
 
@@ -50,9 +48,9 @@ export default function SettingsForm() {
       auto_reply_rules: { enabled: autoReply },
     });
 
-    setLoading(false);};
+    setLoading(false);
+  };
 
-  // Microsoft OAuth
   const connectMicrosoft = async () => {
     await supabaseClient.auth.signInWithOAuth({
       provider: "azure",
@@ -90,7 +88,7 @@ export default function SettingsForm() {
             backdrop-blur-xl
             resize-none
             focus:outline-none
-            focus:ring-2 focus:ring-violet-400/40
+            focus:ring-1 focus:ring-fuchsia-400/20
           "
         />
       </div>
@@ -117,13 +115,14 @@ export default function SettingsForm() {
             h-4 w-4 rounded border-white/30
             bg-black/30
             text-fuchsia-400
-            focus:ring-fuchsia-400/40 focus:ring-offset-0"        />
+            focus:ring-fuchsia-400/40 focus:ring-offset-0
+          "
+        />
       </div>
 
       {/* Buttons */}
       <div className="flex flex-wrap gap-4 pt-2">
 
-        {/* Save */}
         <button
           onClick={saveSettings}
           disabled={loading}
@@ -134,12 +133,12 @@ export default function SettingsForm() {
             bg-gradient-to-r from-fuchsia-500 via-violet-500 to-sky-500
             shadow-[0_0_24px_rgba(129,140,248,0.55)]
             hover:shadow-[0_0_36px_rgba(129,140,248,0.85)]
-            transition-all"
+            transition-all
+          "
         >
           {loading ? "Saving…" : "Save settings"}
         </button>
 
-        {/* Connect Microsoft */}
         <button
           onClick={connectMicrosoft}
           className="

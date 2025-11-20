@@ -4,9 +4,9 @@ import SettingsForm from "@/components/SettingsForm";
 
 export default function SettingsPage() {
   return (
-    <div className="relative mx-auto max-w-5xl px-6 py-20 space-y-14">
+    <div className="relative mx-auto max-w-5xl px-6 py-10 md:py-14 space-y-14">
 
-      {/* Soft top fade for structure */}
+      {/* Soft top fade */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-transparent" />
 
       {/* Label */}
@@ -14,7 +14,7 @@ export default function SettingsPage() {
         ECHO · PREFERENCES
       </p>
 
-      {/* Heading + intro */}
+      {/* Heading */}
       <div className="space-y-5">
         <h1 className="text-white text-3xl sm:text-4xl font-semibold leading-tight">
           Tune how Echo{" "}
@@ -43,7 +43,7 @@ export default function SettingsPage() {
         <SettingsForm />
       </div>
 
-      {/* Footer signature */}
+      {/* Footer */}
       <p className="pt-6 text-center text-[11px] text-slate-400/80">
         Designed by Orrya · The Quiet Intelligence Layer.
       </p>
