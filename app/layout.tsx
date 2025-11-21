@@ -1,34 +1,49 @@
-import { Inter } from 'next/font/google';
-import type { Metadata } from 'next';
-import { ReactNode } from 'react';
+// app/layout.tsx
+import "./globals.css";
+import { Inter } from "next/font/google";
+import type { Metadata } from "next";
+import CinematicOrb from "@/components/CinematicOrb";
 
-// Assuming you have a global CSS file where Tailwind is imported
-import '@/app/globals.css'; 
-
-const inter = Inter({ subsets: ['latin'] });
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: 'Echo Suite | Orrya',
-  description: 'Quiet tools for louder thinking. The intelligence layer for your Microsoft 365 data.',
+  title: "Echo Suite | Orrya",
+  description:
+    "Quiet tools for louder thinking. The intelligence layer for your Microsoft 365 data.",
 };
 
-/**
- * The Root Layout wraps the entire application.
- * * IMPORTANT: This layout MUST NOT contain any authentication checks or redirects,
- * as it wraps the /auth/sign-in page, which would cause an infinite loop.
- * Authentication logic belongs in the specific sub-layouts (like app/(site)/layout.tsx).
- */
 export default function RootLayout({
   children,
 }: {
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>
-        {/* The entire application content, including both protected and public routes, 
-            is rendered here. The session checks are handled by the nested layouts/middleware. */}
-        {children}
+    <html lang="en" className={inter.variable}>
+      <body className="relative min-h-screen overflow-x-hidden text-white bg-[#060b1b]">
+        {/* Deep Orrya gradient field */}
+        <div
+          className="
+            pointer-events-none absolute inset-0 -z-20
+            bg-gradient-to-br from-[#0a0f24] via-[#0b112d] to-[#020611]
+          "
+        />
+
+        {/* Cinematic orb */}
+        <div
+          className="
+            pointer-events-none absolute left-1/2 top-[38%]
+            -translate-x-1/2 -translate-y-1/2
+            -z-10 opacity-[0.35]
+          "
+        >
+          <CinematicOrb size={900} />
+        </div>
+
+        {/* Soft vignette */}
+        <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_center,transparent,rgba(0,0,0,0.75))]" />
+
+        {/* App content */}
+        <main className="relative z-10">{children}</main>
       </body>
     </html>
   );
