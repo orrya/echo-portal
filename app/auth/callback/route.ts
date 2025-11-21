@@ -28,15 +28,14 @@ export async function GET(req: Request) {
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL!;
     const redirectUri =
-      process.env.AZURE_REDIRECT_URI ??
-      `${siteUrl}/auth/callback`;
+      process.env.AZURE_REDIRECT_URI ?? `${siteUrl}/auth/callback`;
 
     if (!clientId || !clientSecret || !supabaseUrl || !serviceKey || !siteUrl) {
       console.error("❌ Missing required env vars");
       return new Response("Server configuration error", { status: 500 });
     }
 
-    // --- 1) Exchange authorization code for Microsoft tokens ---
+    // --- 1) Exchange Microsoft auth code for tokens ---
     const tokenRes = await fetch(
       `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
       {
@@ -88,15 +87,25 @@ export async function GET(req: Request) {
     });
 
     // --- 4) Ensure auth user exists in Supabase Auth ---
-    const { data: existing, error: lookupErr } =
-      await supabase.auth.admin.getUserByEmail(email);
+    let authUserId: string | undefined;
 
-    let authUserId: string;
+    // Safe + Vercel compatible: list & find user by email
+    const { data: userList, error: listErr } =
+      await supabase.auth.admin.listUsers();
 
-    if (existing?.user) {
-      authUserId = existing.user.id;
+    if (listErr) {
+      console.error("❌ Error listing users:", listErr);
+      return new Response("Auth lookup failed", { status: 400 });
+    }
+
+    const match = userList.users.find(
+      (u) => u.email?.toLowerCase() === email.toLowerCase()
+    );
+
+    if (match) {
+      authUserId = match.id;
     } else {
-      // Create auth user manually (Supabase normally ONLY creates users through signUp/signIn)
+      // Create auth user
       const { data: created, error: createErr } =
         await supabase.auth.admin.createUser({
           email,
@@ -111,7 +120,7 @@ export async function GET(req: Request) {
       authUserId = created.user.id;
     }
 
-    // --- 5) Upsert into profiles table ---
+    // --- 5) Upsert into your profiles table ---
     await supabase
       .from("profiles")
       .upsert(
@@ -136,7 +145,7 @@ export async function GET(req: Request) {
       { onConflict: "user_id,provider" }
     );
 
-    // --- 7) Create session row in sessions table ---
+    // --- 7) Create session row ---
     const sessionToken = crypto.randomUUID();
     const expiresAt = new Date(
       Date.now() + SESSION_TTL_HOURS * 60 * 60 * 1000
@@ -159,7 +168,7 @@ export async function GET(req: Request) {
     response.cookies.set("echo-session", sessionToken, {
       httpOnly: true,
       secure: true,
-      sameSite: "lax",
+     sameSite: "lax",
       path: "/",
       maxAge: SESSION_TTL_HOURS * 60 * 60,
     });
