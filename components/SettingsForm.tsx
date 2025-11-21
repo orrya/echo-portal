@@ -55,14 +55,9 @@ export default function SettingsForm() {
   };
 
   /** Microsoft OAuth */
-  const connectMicrosoft = async () => {
-    await supabaseClient.auth.signInWithOAuth({
-      provider: "azure",
-      options: {
-        scopes: "email offline_access",
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
-      },
-    });
+  const connectMicrosoft = () => {
+  window.location.href = "/auth/redirect";
+};
   };
 
   return (
