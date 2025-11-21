@@ -17,6 +17,7 @@ function getBandForCategory(category: string | null) {
 
 export default async function EmailPage() {
   const user = await getUserFromSession();
+  console.log("EmailPage user:", user?.id);
 
   if (!user) {
     return (
