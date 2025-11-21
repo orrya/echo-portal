@@ -3,6 +3,18 @@ import { getUserFromSession } from "@/lib/getUserFromSession";
 import { createClient } from "@supabase/supabase-js";
 import EmailClientShell from "./EmailClientShell";
 
+// 🔥 Correct category → band mapping
+function getBandForCategory(category: string | null) {
+  const c = (category ?? "").toLowerCase().trim();
+
+  if (c === "follow-up" || c.includes("follow")) return "follow_up";
+  if (c === "informational" || c.includes("info") || c.includes("promo") || c.includes("newsletter")) {
+    return "noise";
+  }
+
+  return "action"; // default
+}
+
 export default async function EmailPage() {
   const user = await getUserFromSession();
 
@@ -20,34 +32,33 @@ export default async function EmailPage() {
     );
   }
 
-  // ✅ SAFE: This is a SERVER COMPONENT — service key never leaves server
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
   const { data: emails } = await supabase
-    .from("email_records") // ← your real table
+    .from("email_records")
     .select("*")
     .eq("user_id", user.id)
     .order("Date Received", { ascending: false });
 
-  const actionEmails = emails?.filter(
-    (e) => (e.Category ?? "").toLowerCase().includes("action")
-  ) ?? [];
+  const all = emails ?? [];
 
-  const followUpEmails = emails?.filter(
-    (e) => (e.Category ?? "").toLowerCase().includes("follow")
-  ) ?? [];
+  // 🎯 FIXED: Proper band grouping
+  const actionEmails = all.filter(
+    (e) => getBandForCategory(e.Category) === "action"
+  );
 
-  const noiseEmails = emails?.filter(
-    (e) =>
-      (e.Category ?? "").toLowerCase().includes("noise") ||
-      (e.Category ?? "").toLowerCase().includes("promo") ||
-      (e.Category ?? "").toLowerCase().includes("muted")
-  ) ?? [];
+  const followUpEmails = all.filter(
+    (e) => getBandForCategory(e.Category) === "follow_up"
+  );
 
-  const total = emails?.length ?? 0;
+  const noiseEmails = all.filter(
+    (e) => getBandForCategory(e.Category) === "noise"
+  );
+
+  const total = all.length;
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-20 space-y-12">
@@ -89,7 +100,7 @@ export default async function EmailPage() {
         </p>
       </div>
 
-      {/* Category cards + cinematic drawer system */}
+      {/* Category cards + drawer */}
       <EmailClientShell
         actionEmails={actionEmails}
         followUpEmails={followUpEmails}
