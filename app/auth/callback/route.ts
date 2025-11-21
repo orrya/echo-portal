@@ -41,6 +41,13 @@ export async function GET(req: Request) {
       console.error("❌ Missing required env vars");
       return new Response("Server configuration error", { status: 500 });
     }
+    console.log("🔵 ENV CHECK", {
+  clientId,
+  hasSecret: !!clientSecret,
+  redirectUri,
+  tenantId,
+});
+
 
     // --- 1) Exchange Microsoft auth code for tokens ---
     const tokenRes = await fetch(
