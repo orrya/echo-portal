@@ -1,45 +1,30 @@
-import "./globals.css";
-import { Inter } from "next/font/google";
-import CinematicOrb from "@/components/CinematicOrb";
+// app/(site)/layout.tsx
+import { ReactNode } from "react";
+import NavBar from "@/components/NavBar";
+import { SupabaseProvider } from "@/components/SupabaseProvider";
+import { getUserFromSession } from "@/lib/getUserFromSession";
+import { redirect } from "next/navigation";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+export default async function SiteLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const user = await getUserFromSession();
 
-export const metadata = {
-  title: "Echo Suite Portal",
-  description: "Dashboard for the Echo automation assistant.",
-  icons: {
-    icon: "/favicon.ico",
-    shortcut: "/favicon.ico",
-    apple: "/favicon.ico",
-  },
-};
+  // If no session → send to sign-in
+  if (!user) {
+    redirect("/auth/sign-in");
+  }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // If you want the NavBar to know about the user later,
+  // you can pass it via props or context; for now we just render.
   return (
-    <html lang="en" className={`${inter.variable} font-sans`}>
-      <body className="relative min-h-screen overflow-x-hidden text-white bg-[#060b1b]">
-        
-        {/* Orrya-style deep gradient */}
-        <div
-          className="
-            pointer-events-none absolute inset-0 -z-20
-            bg-gradient-to-br
-            from-[#0a0f24]
-            via-[#0b112d]
-            to-[#020611]
-          "
-        />
-
-        {/* Cinematic orb */}
-        <div className="pointer-events-none absolute left-1/2 top-[38%] -translate-x-1/2 -translate-y-1/2 -z-10 opacity-[0.35]">
-          <CinematicOrb size={900} />
-        </div>
-
-        {/* Soft vignette */}
-        <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_center,transparent,rgba(0,0,0,0.75))]" />
-
+    <SupabaseProvider>
+      <NavBar />
+      <main className="relative z-10 max-w-6xl mx-auto px-6 py-12 text-slate-200">
         {children}
-      </body>
-    </html>
+      </main>
+    </SupabaseProvider>
   );
 }

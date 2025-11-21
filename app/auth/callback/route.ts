@@ -1,10 +1,3 @@
-console.log("🔎 ENV CHECK", {
-  supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
-  serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?
-    "present" : "MISSING",
-  siteUrl: process.env.NEXT_PUBLIC_SITE_URL,
-  redirectUri: process.env.AZURE_REDIRECT_URI,
-});
 // app/auth/callback/route.ts
 export const dynamic = "force-dynamic";
 
@@ -18,13 +11,11 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const code = url.searchParams.get("code");
-    const origin = url.origin; // current deployment origin
 
     if (!code) {
       return new Response("Missing authorization code", { status: 400 });
     }
 
-    // --- ENV VARS ---
     const clientId =
       process.env.AZURE_CLIENT_ID || process.env.NEXT_PUBLIC_AZURE_CLIENT_ID;
     const clientSecret = process.env.AZURE_CLIENT_SECRET;
@@ -32,24 +23,31 @@ export async function GET(req: Request) {
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-    // redirect URI must match what we used in /auth/redirect
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL!;
     const redirectUri =
-      process.env.AZURE_REDIRECT_URI ?? `${origin}/auth/callback`;
+      process.env.AZURE_REDIRECT_URI ?? `${siteUrl}/auth/callback`;
 
-    if (!clientId || !clientSecret || !supabaseUrl || !serviceKey) {
-      console.error("❌ Missing required env vars");
+    if (!clientId || !clientSecret || !supabaseUrl || !serviceKey || !siteUrl) {
+      console.error("❌ Missing env vars", {
+        clientId: !!clientId,
+        clientSecret: !!clientSecret,
+        supabaseUrl: !!supabaseUrl,
+        serviceKey: !!serviceKey,
+        siteUrl: !!siteUrl,
+      });
       return new Response("Server configuration error", { status: 500 });
     }
-    console.log("🔵 ENV CHECK", {
-  clientId,
-  hasSecret: !!clientSecret,
-  redirectUri,
-  tenantId,
-});
 
+    console.log("ENV CHECK", {
+      supabaseUrl,
+      siteUrl,
+      redirectUri,
+      clientId,
+      hasSecret: !!clientSecret,
+      tenantId,
+    });
 
-    // --- 1) Exchange Microsoft auth code for tokens ---
+    // 1) Exchange code → tokens
     const tokenRes = await fetch(
       `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
       {
@@ -78,14 +76,14 @@ export async function GET(req: Request) {
     const refreshToken = tokenJson.refresh_token as string | undefined;
     const expiresIn = tokenJson.expires_in ?? 3600;
 
-    // --- 2) Fetch Microsoft profile ---
+    // 2) Fetch MS profile
     const profileRes = await fetch("https://graph.microsoft.com/v1.0/me", {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     const profile = await profileRes.json();
 
-    const email =
+    const email: string | undefined =
       profile.mail ?? profile.userPrincipalName ?? undefined;
 
     if (!email) {
@@ -93,15 +91,14 @@ export async function GET(req: Request) {
       return new Response("Microsoft profile error", { status: 400 });
     }
 
-    // --- 3) Supabase Admin Client ---
+    // 3) Supabase admin client
     const supabase = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false },
     });
 
-    // --- 4) Ensure auth user exists in Supabase Auth ---
-    let authUserId: string | undefined;
+    // 4) Ensure auth user exists
+    let authUserId: string;
 
-    // Vercel-safe: list users & find by email
     const { data: userList, error: listErr } =
       await supabase.auth.admin.listUsers();
 
@@ -115,7 +112,8 @@ export async function GET(req: Request) {
     );
 
     if (match) {
-      authUserId = match.id;} else {
+      authUserId = match.id;
+    } else {
       const { data: created, error: createErr } =
         await supabase.auth.admin.createUser({
           email,
@@ -130,7 +128,7 @@ export async function GET(req: Request) {
       authUserId = created.user.id;
     }
 
-    // --- 5) Upsert into your profiles table ---
+    // 5) Upsert profile
     await supabase
       .from("profiles")
       .upsert(
@@ -143,7 +141,7 @@ export async function GET(req: Request) {
         { onConflict: "id" }
       );
 
-    // --- 6) Upsert Microsoft tokens ---
+    // 6) Upsert tokens
     await supabase.from("user_connections").upsert(
       {
         user_id: authUserId,
@@ -155,7 +153,7 @@ export async function GET(req: Request) {
       { onConflict: "user_id,provider" }
     );
 
-    // --- 7) Create session row ---
+    // 7) Create session row
     const sessionToken = crypto.randomUUID();
     const expiresAt = new Date(
       Date.now() + SESSION_TTL_HOURS * 60 * 60 * 1000
@@ -172,13 +170,13 @@ export async function GET(req: Request) {
       return new Response("Session creation failed", { status: 500 });
     }
 
-    // --- 8) Set cookie and redirect to /dashboard on SAME origin ---
-    const response = NextResponse.redirect(new URL("/dashboard", origin));
+    // 8) Set cookie and redirect
+    const response = NextResponse.redirect(`${siteUrl}/dashboard`);
 
     response.cookies.set("echo-session", sessionToken, {
       httpOnly: true,
       secure: true,
-      sameSite: "lax", // we are same-site
+      sameSite: "lax",
       path: "/",
       maxAge: SESSION_TTL_HOURS * 60 * 60,
     });
