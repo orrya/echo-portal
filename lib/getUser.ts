@@ -1,12 +1,13 @@
-import { createServerClient } from "@supabase/auth-helpers-nextjs";
+// lib/getUser.ts
 import { cookies } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
 
 export async function getUser() {
   const cookieStore = cookies();
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,  // NOT service key here
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, // ⭐ anonymous key only
     {
       cookies: {
         get(name: string) {
@@ -20,5 +21,5 @@ export async function getUser() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  return user;
+  return user ?? null;
 }
