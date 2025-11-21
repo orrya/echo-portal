@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 const PUBLIC_PATH_PREFIXES = [
+  "/",
   "/auth/sign-in",
   "/auth/callback",
   "/auth/redirect", // <-- Added this path
