@@ -1,16 +1,19 @@
-// app/auth/callback/route.ts
-export const dynamic = "force-dynamic";
-
 import { NextResponse } from "next/server";
-import crypto from "crypto";
-import { createClient } from "@supabase/supabase-js";
+import { cookies } from "next/headers";
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"; 
+import { createClient } from "@supabase/supabase-js"; 
+// crypto is no longer needed since we aren't generating a client-side verifier
+// import crypto from "crypto";
 
-const SESSION_TTL_HOURS = 24;
+export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const code = url.searchParams.get("code");
+    
+    // Get the cookie store needed for Auth Helpers
+    const cookieStore = cookies(); 
 
     if (!code) {
       console.error("❌ Missing code in callback URL:", req.url);
@@ -30,16 +33,7 @@ export async function GET(req: Request) {
     const redirectUri =
       process.env.AZURE_REDIRECT_URI ?? `${siteUrl}/auth/callback`;
 
-    console.log("🔎 ENV CHECK", {
-      siteUrl,
-      redirectUri,
-      clientId,
-      hasSecret: !!clientSecret,
-      tenantId
-    });
-
     // --- 1) Exchange Microsoft auth code ---
-    console.log("➡️ Posting code to Microsoft OAuth...");
     const tokenRes = await fetch(
       `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
       {
@@ -56,8 +50,7 @@ export async function GET(req: Request) {
     );
 
     const tokenJson = await tokenRes.json();
-    console.log("🔎 Token exchange response:", tokenJson);
-
+    
     if (!tokenRes.ok) {
       console.error("❌ Token exchange failed:", tokenJson);
       return new Response("Token exchange failed", { status: 400 });
@@ -68,12 +61,10 @@ export async function GET(req: Request) {
     const expiresIn = tokenJson.expires_in ?? 3600;
 
     // --- 2) Microsoft Profile ---
-    console.log("➡️ Fetching Microsoft /me profile");
     const profileRes = await fetch("https://graph.microsoft.com/v1.0/me", {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
     const profile = await profileRes.json();
-    console.log("🔎 Profile:", profile);
 
     const email =
       profile.mail ?? profile.userPrincipalName ?? undefined;
@@ -83,22 +74,24 @@ export async function GET(req: Request) {
       return new Response("Microsoft profile error", { status: 400 });
     }
 
-    // --- 3) Supabase Admin ---
-    const supabase = createClient(supabaseUrl, serviceKey, {
+    // --- 3) Supabase Service Role Client ---
+    // Renamed for clarity, using the service key
+    const supabaseServiceRole = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false }
     });
 
     // --- 4) Check/Create Auth User ---
-    console.log("➡️ Listing Supabase users...");
+    let authUserId: string;
+    
+    // Use the Service Role client to list users
     const { data: userList, error: listErr } =
-      await supabase.auth.admin.listUsers();
+      await supabaseServiceRole.auth.admin.listUsers();
 
     if (listErr) {
       console.error("❌ List users error:", listErr);
       return new Response("Auth lookup failed", { status: 400 });
     }
 
-    let authUserId: string;
     const match = userList.users.find(
       (u) => u.email?.toLowerCase() === email.toLowerCase()
     );
@@ -108,12 +101,11 @@ export async function GET(req: Request) {
       authUserId = match.id;
     } else {
       console.log("➡️ Creating new Supabase Auth user");
-      const created = await supabase.auth.admin.createUser({
+      // Use the Service Role client to create a user
+      const created = await supabaseServiceRole.auth.admin.createUser({
         email,
         email_confirm: true
       });
-
-      console.log("🔎 CreateUser result:", created);
 
       if (created.error || !created.data?.user) {
         console.error("❌ Failed to create auth user:", created.error);
@@ -123,8 +115,9 @@ export async function GET(req: Request) {
       authUserId = created.data.user.id;
     }
 
-    // --- 5) Upsert profile ---
-    await supabase.from("profiles").upsert(
+    // --- 5) Upsert profile & connection (Crucial for linking data to authUserId) ---
+    // Note: This correctly uses the Service Role client to write to your tables.
+    await supabaseServiceRole.from("profiles").upsert(
       {
         id: authUserId,
         display_name: profile.displayName ?? null,
@@ -134,8 +127,7 @@ export async function GET(req: Request) {
       { onConflict: "id" }
     );
 
-    // --- 6) Upsert connection ---
-    await supabase.from("user_connections").upsert(
+    await supabaseServiceRole.from("user_connections").upsert(
       {
         user_id: authUserId,
         provider: "microsoft",
@@ -146,54 +138,44 @@ export async function GET(req: Request) {
       { onConflict: "user_id,provider" }
     );
 
-    // --- 7) Create session ---
-    const sessionToken = crypto.randomUUID();
-    const expiresAt = new Date(
-      Date.now() + SESSION_TTL_HOURS * 60 * 60 * 1000
-    ).toISOString();
+    // --- 6) GENERATE AUTH CODE FOR SIGN-IN ---
 
-    const { error: sessionErr } = await supabase.from("sessions").insert({
-      user_id: authUserId,
-      session_token: sessionToken,
-      expires_at: expiresAt
-    });
+    // We use an 'as any' cast here to suppress the TypeScript error you encountered
+    // on environments with mismatched or older Supabase typings.
+    const { data: pkceData, error: pkceErr } =
+        await (supabaseServiceRole.auth.admin as any).generateAuthCode(authUserId);
+        
+    if (pkceErr || !pkceData?.code) {
+      console.error("❌ Auth code generation failed:", pkceErr);
+      return new Response("Auth code generation failed", { status: 500 });
+    }
+    
+    console.log("✔ Auth Code generated successfully.");
+    const pkceCode = pkceData.code;
 
-    if (sessionErr) {
-      console.error("❌ Session insert failed:", sessionErr);
-      return new Response("Session creation failed", { status: 500 });
+
+    // --- 7) EXCHANGE CODE FOR SESSION (using Auth Helpers) ---
+    
+    // Create the Auth Helpers client which manages cookie setting
+    const supabaseRouteClient = createRouteHandlerClient({ cookies: () => cookieStore });
+    
+    // This CRITICAL step exchanges the Admin-generated code for a full user session,
+    // automatically setting the correct standard Supabase cookies (sb-...)
+    const { error: signInErr } = await supabaseRouteClient.auth.exchangeCodeForSession(pkceCode);
+
+    if (signInErr) {
+        console.error("❌ exchangeCodeForSession failed:", signInErr);
+        // Redirect back to sign-in on error
+        return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=auth_failed`);
     }
 
-    console.log("✔ Session created:", sessionToken);
+    console.log("✔ Supabase session established via code exchange.");
 
-    // --- 8) Set cookie ---
-    const response = NextResponse.redirect(`${siteUrl}/dashboard`);
-
-    // Calculate expiration date in seconds
-    const maxAgeSeconds = SESSION_TTL_HOURS * 60 * 60;
-    const expiresDate = new Date(Date.now() + maxAgeSeconds * 1000);
-
-    // CRITICAL: Using the raw header, WITHOUT the 'domain' attribute.
-    const cookieHeader = `echo-session=${sessionToken}; Path=/; Expires=${expiresDate.toUTCString()}; HttpOnly; Secure; SameSite=Lax`;
-
-    response.headers.set('Set-Cookie', cookieHeader);
+    // --- 8) REDIRECT TO DASHBOARD ---
     
-    console.log("🍪 Cookie set OK with header:", cookieHeader);
+    // The correct session cookies are now set in the response headers.
+    return NextResponse.redirect(`${siteUrl}/dashboard`);
 
-    return response;
-
-    response.cookies.set("echo-session", sessionToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "lax",
-      path: "/",
-      // CRITICAL FIX: Removed the 'domain' attribute. 
-      // The browser will now set the correct host domain.
-      // domain: ".echo.orrya.co.uk" <-- Removed!
-    });
-
-    console.log("🍪 Cookie set OK");
-
-    return response;
   } catch (err) {
     console.error("❌ Unhandled callback error:", err);
     return new Response("Internal Server Error", { status: 500 });
