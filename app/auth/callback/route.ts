@@ -16,8 +16,10 @@ export async function GET(req: Request) {
       return new Response("Missing authorization code", { status: 400 });
     }
 
+    // --- ENV VARS ---
     const clientId =
       process.env.AZURE_CLIENT_ID || process.env.NEXT_PUBLIC_AZURE_CLIENT_ID;
+
     const clientSecret = process.env.AZURE_CLIENT_SECRET;
     const tenantId = process.env.AZURE_TENANT_ID || "common";
 
@@ -27,19 +29,9 @@ export async function GET(req: Request) {
     const redirectUri =
       process.env.AZURE_REDIRECT_URI ?? `${siteUrl}/auth/callback`;
 
-    if (!clientId || !clientSecret || !supabaseUrl || !serviceKey || !siteUrl) {
-      console.error("❌ Missing env vars", {
-        clientId: !!clientId,
-        clientSecret: !!clientSecret,
-        supabaseUrl: !!supabaseUrl,
-        serviceKey: !!serviceKey,
-        siteUrl: !!siteUrl,
-      });
-      return new Response("Server configuration error", { status: 500 });
-    }
-
-    console.log("ENV CHECK", {
+    console.log("🔎 ENV CHECK", {
       supabaseUrl,
+      serviceKey: serviceKey ? "present" : "missing",
       siteUrl,
       redirectUri,
       clientId,
@@ -47,17 +39,15 @@ export async function GET(req: Request) {
       tenantId,
     });
 
-    // 1) Exchange code → tokens
+    // --- 1) Exchange Microsoft auth code for tokens ---
     const tokenRes = await fetch(
       `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
-          client_id: clientId,
-          client_secret: clientSecret,
+          client_id: clientId!,
+          client_secret: clientSecret!,
           grant_type: "authorization_code",
           code,
           redirect_uri: redirectUri,
@@ -76,14 +66,14 @@ export async function GET(req: Request) {
     const refreshToken = tokenJson.refresh_token as string | undefined;
     const expiresIn = tokenJson.expires_in ?? 3600;
 
-    // 2) Fetch MS profile
+    // --- 2) Fetch Microsoft profile ---
     const profileRes = await fetch("https://graph.microsoft.com/v1.0/me", {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     const profile = await profileRes.json();
 
-    const email: string | undefined =
+    const email =
       profile.mail ?? profile.userPrincipalName ?? undefined;
 
     if (!email) {
@@ -91,14 +81,15 @@ export async function GET(req: Request) {
       return new Response("Microsoft profile error", { status: 400 });
     }
 
-    // 3) Supabase admin client
+    // --- 3) Supabase Admin Client ---
     const supabase = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false },
     });
 
-    // 4) Ensure auth user exists
+    // --- 4) Ensure auth user exists in Supabase Auth ---
     let authUserId: string;
 
+    // Vercel-safe version: list users
     const { data: userList, error: listErr } =
       await supabase.auth.admin.listUsers();
 
@@ -128,20 +119,18 @@ export async function GET(req: Request) {
       authUserId = created.user.id;
     }
 
-    // 5) Upsert profile
-    await supabase
-      .from("profiles")
-      .upsert(
-        {
-          id: authUserId,
-          display_name: profile.displayName ?? null,
-          notion_db_row_id: null,
-          n8n_user_id: null,
-        },
-        { onConflict: "id" }
-      );
+    // --- 5) Upsert into profiles table ---
+    await supabase.from("profiles").upsert(
+      {
+        id: authUserId,
+        display_name: profile.displayName ?? null,
+        notion_db_row_id: null,
+        n8n_user_id: null,
+      },
+      { onConflict: "id" }
+    );
 
-    // 6) Upsert tokens
+    // --- 6) Upsert Microsoft tokens ---
     await supabase.from("user_connections").upsert(
       {
         user_id: authUserId,
@@ -153,7 +142,7 @@ export async function GET(req: Request) {
       { onConflict: "user_id,provider" }
     );
 
-    // 7) Create session row
+    // --- 7) Create session row ---
     const sessionToken = crypto.randomUUID();
     const expiresAt = new Date(
       Date.now() + SESSION_TTL_HOURS * 60 * 60 * 1000
@@ -170,15 +159,21 @@ export async function GET(req: Request) {
       return new Response("Session creation failed", { status: 500 });
     }
 
-    // 8) Set cookie and redirect
+    // --- 8) Set cookie with REQUIRED domain ---
     const response = NextResponse.redirect(`${siteUrl}/dashboard`);
 
     response.cookies.set("echo-session", sessionToken, {
       httpOnly: true,
       secure: true,
-      sameSite: "lax",
+      sameSite: "none",
+      domain: "echo-portal.vercel.app", // 🔥 REQUIRED FIX
       path: "/",
       maxAge: SESSION_TTL_HOURS * 60 * 60,
+    });
+
+    console.log("🍪 COOKIE SET:", {
+      domain: "echo-portal.vercel.app",
+      value: sessionToken,
     });
 
     return response;
