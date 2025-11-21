@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"; 
 import { createClient } from "@supabase/supabase-js"; 
-// crypto is no longer needed since we aren't generating a client-side verifier
-// import crypto from "crypto";
+// Removed jwt import: import jwt from "jsonwebtoken"; 
 
 export const dynamic = "force-dynamic";
 
@@ -75,7 +74,6 @@ export async function GET(req: Request) {
     }
 
     // --- 3) Supabase Service Role Client ---
-    // Renamed for clarity, using the service key
     const supabaseServiceRole = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false }
     });
@@ -104,7 +102,7 @@ export async function GET(req: Request) {
       // Use the Service Role client to create a user
       const created = await supabaseServiceRole.auth.admin.createUser({
         email,
-        email_confirm: true
+        email_confirm: true // Ensure the user is immediately usable
       });
 
       if (created.error || !created.data?.user) {
@@ -113,15 +111,19 @@ export async function GET(req: Request) {
       }
 
       authUserId = created.data.user.id;
+      
+      // If a new user is created, log the ID for debugging
+      console.log("✔ New user created with ID:", authUserId);
     }
 
     // --- 5) Upsert profile & connection (Crucial for linking data to authUserId) ---
-    // Note: This correctly uses the Service Role client to write to your tables.
+    // This connects your new Supabase Auth ID (authUserId) to your application tables.
     await supabaseServiceRole.from("profiles").upsert(
       {
         id: authUserId,
         display_name: profile.displayName ?? null,
-        notion_db_row_id: null,
+        // Assuming other fields are optional or nullable
+        notion_db_row_id: null, 
         n8n_user_id: null
       },
       { onConflict: "id" }
@@ -133,25 +135,26 @@ export async function GET(req: Request) {
         provider: "microsoft",
         access_token: accessToken,
         refresh_token: refreshToken,
+        // Calculate the exact expiration time
         expires_at: new Date(Date.now() + expiresIn * 1000).toISOString()
       },
       { onConflict: "user_id,provider" }
     );
 
-    // --- 6) GENERATE AUTH CODE FOR SIGN-IN ---
+    // --- 6) GENERATE CODE FOR SIGN-IN (USING OLDER generateSession) ---
 
-    // We use an 'as any' cast here to suppress the TypeScript error you encountered
-    // on environments with mismatched or older Supabase typings.
-    const { data: pkceData, error: pkceErr } =
-        await (supabaseServiceRole.auth.admin as any).generateAuthCode(authUserId);
+    // The function name is changed to the older 'generateSession', which 
+    // is necessary because your deployment environment doesn't recognize the new 'generateAuthCode'.
+    const { data: sessionData, error: sessionErr } =
+        await supabaseServiceRole.auth.admin.generateSession(authUserId);
         
-    if (pkceErr || !pkceData?.code) {
-      console.error("❌ Auth code generation failed:", pkceErr);
-      return new Response("Auth code generation failed", { status: 500 });
+    if (sessionErr || !sessionData?.code) {
+      console.error("❌ Session code generation failed:", sessionErr);
+      return new Response("Session code generation failed", { status: 500 });
     }
     
-    console.log("✔ Auth Code generated successfully.");
-    const pkceCode = pkceData.code;
+    console.log("✔ Session Code generated successfully.");
+    const pkceCode = sessionData.code;
 
 
     // --- 7) EXCHANGE CODE FOR SESSION (using Auth Helpers) ---
