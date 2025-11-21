@@ -3,22 +3,37 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export function middleware(req: NextRequest) {
-  // If we got here, this path is protected (see matcher below)
+  const pathname = req.nextUrl.pathname;
+
+  // Allow public routes (auth + static)
+  const isPublic =
+    pathname.startsWith("/auth") ||
+    pathname.startsWith("/api") ||
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/favicon") ||
+    pathname.startsWith("/public");
+
+  if (isPublic) {
+    return NextResponse.next();
+  }
+
+  // Check for session cookie
   const sessionToken = req.cookies.get("echo-session")?.value;
 
   if (!sessionToken) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/auth/sign-in";
-    url.search = "";
-    return NextResponse.redirect(url);
+    const redirectUrl = req.nextUrl.clone();
+    redirectUrl.pathname = "/auth/sign-in";
+    redirectUrl.search = "";
+    return NextResponse.redirect(redirectUrl);
   }
 
-  return NextResponse.next();
-}
-
-// Protect everything EXCEPT auth, api, _next, static, favicon
+  return NextResponse.next();}
 export const config = {
   matcher: [
-    "/((?!auth|api|_next/static|_next/image|favicon.ico|public).*)",
+    "/dashboard/:path*",
+    "/email/:path*",
+    "/summary/:path*",
+    "/settings/:path*",
+    "/activity/:path*",
   ],
 };

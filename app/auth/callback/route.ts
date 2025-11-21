@@ -39,7 +39,7 @@ export async function GET(req: Request) {
       tenantId,
     });
 
-    // --- 1) Exchange Microsoft auth code for tokens ---
+    // --- 1) Exchange code for MS tokens ---
     const tokenRes = await fetch(
       `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
       {
@@ -72,9 +72,7 @@ export async function GET(req: Request) {
     });
 
     const profile = await profileRes.json();
-
-    const email =
-      profile.mail ?? profile.userPrincipalName ?? undefined;
+    const email = profile.mail ?? profile.userPrincipalName;
 
     if (!email) {
       console.error("❌ Microsoft profile missing email:", profile);
@@ -86,10 +84,7 @@ export async function GET(req: Request) {
       auth: { persistSession: false },
     });
 
-    // --- 4) Ensure auth user exists in Supabase Auth ---
-    let authUserId: string;
-
-    // Vercel-safe version: list users
+    // --- 4) Ensure auth user exists in Supabase ---
     const { data: userList, error: listErr } =
       await supabase.auth.admin.listUsers();
 
@@ -98,6 +93,7 @@ export async function GET(req: Request) {
       return new Response("Auth lookup failed", { status: 400 });
     }
 
+    let authUserId: string;
     const match = userList.users.find(
       (u) => u.email?.toLowerCase() === email.toLowerCase()
     );
@@ -119,7 +115,7 @@ export async function GET(req: Request) {
       authUserId = created.user.id;
     }
 
-    // --- 5) Upsert into profiles table ---
+    // --- 5) Upsert into profiles ---
     await supabase.from("profiles").upsert(
       {
         id: authUserId,
@@ -159,18 +155,20 @@ export async function GET(req: Request) {
       return new Response("Session creation failed", { status: 500 });
     }
 
-    // --- 8) Set cookie and redirect ---
+    // --- 8) Set session cookie (NO DOMAIN!!!) ---
     const response = NextResponse.redirect(`${siteUrl}/dashboard`);
 
     response.cookies.set("echo-session", sessionToken, {
       httpOnly: true,
       secure: true,
-      sameSite: "lax", // important for redirects
+      sameSite: "none",
       path: "/",
-      maxAge: SESSION_TTL_HOURS * 60 * 60,
+      // ❌ domain removed
     });
 
-    console.log("🍪 COOKIE SET (no domain)", { value: sessionToken });
+    console.log("🍪 COOKIE SET (auto domain)", {
+      value: sessionToken,
+    });
 
     return response;
   } catch (err) {
