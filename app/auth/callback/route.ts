@@ -168,7 +168,7 @@ export async function GET(req: Request) {
     response.cookies.set("echo-session", sessionToken, {
       httpOnly: true,
       secure: true,
-     sameSite: "lax",
+     sameSite: "none",
       path: "/",
       maxAge: SESSION_TTL_HOURS * 60 * 60,
     });
