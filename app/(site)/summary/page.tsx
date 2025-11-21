@@ -1,8 +1,8 @@
-import { getUserFromSession } from "@/lib/getUserFromSession";
+import { getUser } from "@/lib/getUser";
 import { createClient } from "@supabase/supabase-js";
 
 export default async function SummaryPage() {
-  const user = await getUserFromSession();
+  const user = await getUser();
 
   if (!user) {
     return (
