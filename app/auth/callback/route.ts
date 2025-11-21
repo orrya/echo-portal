@@ -2,8 +2,8 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
+import { createClient } from "@supabase/supabase-js";
 
 const SESSION_TTL_HOURS = 24;
 
@@ -16,34 +16,34 @@ export async function GET(req: Request) {
       return new Response("Missing authorization code", { status: 400 });
     }
 
+    // --- ENV VARS ---
     const clientId =
-      process.env.AZURE_CLIENT_ID ?? process.env.NEXT_PUBLIC_AZURE_CLIENT_ID;
+      process.env.AZURE_CLIENT_ID ||
+      process.env.NEXT_PUBLIC_AZURE_CLIENT_ID;
+
     const clientSecret = process.env.AZURE_CLIENT_SECRET;
     const tenantId = process.env.AZURE_TENANT_ID || "common";
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL!;
     const redirectUri =
-      process.env.AZURE_REDIRECT_URI ?? `${siteUrl}/auth/callback`;
+      process.env.AZURE_REDIRECT_URI ??
+      `${siteUrl}/auth/callback`;
 
     if (!clientId || !clientSecret || !supabaseUrl || !serviceKey || !siteUrl) {
-      console.error("❌ Missing env vars", {
-        clientId: !!clientId,
-        clientSecret: !!clientSecret,
-        supabaseUrl: !!supabaseUrl,
-        serviceKey: !!serviceKey,
-        siteUrl: !!siteUrl,
-      });
+      console.error("❌ Missing required env vars");
       return new Response("Server configuration error", { status: 500 });
     }
 
-    // 1) Exchange code → Microsoft tokens
+    // --- 1) Exchange authorization code for Microsoft tokens ---
     const tokenRes = await fetch(
       `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
         body: new URLSearchParams({
           client_id: clientId,
           client_secret: clientSecret,
@@ -61,93 +61,99 @@ export async function GET(req: Request) {
       return new Response("Token exchange failed", { status: 400 });
     }
 
-    const accessToken: string = tokenJson.access_token;
-    const refreshToken: string | undefined = tokenJson.refresh_token;
-    const expiresIn: number = tokenJson.expires_in ?? 3600;
+    const accessToken = tokenJson.access_token as string;
+    const refreshToken = tokenJson.refresh_token as string | undefined;
+    const expiresIn = tokenJson.expires_in ?? 3600;
 
-    // 2) Fetch Microsoft profile
+    // --- 2) Fetch Microsoft profile ---
     const profileRes = await fetch("https://graph.microsoft.com/v1.0/me", {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     const profile = await profileRes.json();
 
-    const email: string | undefined =
-      profile.mail ?? profile.userPrincipalName ?? undefined;
+    const email =
+      profile.mail ??
+      profile.userPrincipalName ??
+      undefined;
 
     if (!email) {
       console.error("❌ Microsoft profile missing email:", profile);
       return new Response("Microsoft profile error", { status: 400 });
     }
 
-    // 3) Supabase DB client
+    // --- 3) Supabase Admin Client ---
     const supabase = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false },
     });
 
-    // 4) Upsert user profile
-    const { data: userRow, error: userErr } = await supabase
-      .from("users")
-      .upsert(
-        {
-          email,
-          display_name: profile.displayName,
-          ms_user_id: profile.id,
-        },
-        { onConflict: "email" }
-      )
-      .select("*")
-      .single();
+    // --- 4) Ensure auth user exists in Supabase Auth ---
+    const { data: existing, error: lookupErr } =
+      await supabase.auth.admin.getUserByEmail(email);
 
-    if (userErr || !userRow) {
-      console.error("❌ User upsert failed:", userErr);
-      return new Response("User upsert failed", { status: 500 });
+    let authUserId: string;
+
+    if (existing?.user) {
+      authUserId = existing.user.id;
+    } else {
+      // Create auth user manually (Supabase normally ONLY creates users through signUp/signIn)
+      const { data: created, error: createErr } =
+        await supabase.auth.admin.createUser({
+          email,
+          email_confirm: true,
+        });
+
+      if (createErr || !created?.user) {
+        console.error("❌ Failed to create auth user:", createErr);
+        return new Response("Failed to create auth user", { status: 500 });
+      }
+
+      authUserId = created.user.id;
     }
 
-    const userId = userRow.id;
-
-    // 5) Store Microsoft tokens in DB
-    console.log("🔵🔵 DEBUG — ENTERING TOKEN UPSERT STEP 🔵🔵");
-    console.log("🔵 userRow:", userRow);
-    console.log("🔵 userRow.id:", userRow?.id);
-    console.log("🔵 incoming userId variable:", userId);
-
-    const { error: connErr } = await supabase
-      .from("user_connections")
+    // --- 5) Upsert into profiles table ---
+    await supabase
+      .from("profiles")
       .upsert(
         {
-          user_id: userId,
-          provider: "microsoft",
-          access_token: accessToken,
-          refresh_token: refreshToken,
-          expires_at: new Date(
-            Date.now() + expiresIn * 1000
-          ).toISOString(),
+          id: authUserId,
+          display_name: profile.displayName ?? null,
+          notion_db_row_id: null,
+          n8n_user_id: null,
         },
-        { onConflict: "user_id,provider" }
+        { onConflict: "id" }
       );
 
-    console.log("🔴 token upsert result error:", connErr);
+    // --- 6) Upsert Microsoft tokens ---
+    await supabase.from("user_connections").upsert(
+      {
+        user_id: authUserId,
+        provider: "microsoft",
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
+      },
+      { onConflict: "user_id,provider" }
+    );
 
-    // 6) Create portal session
+    // --- 7) Create session row in sessions table ---
     const sessionToken = crypto.randomUUID();
-
     const expiresAt = new Date(
       Date.now() + SESSION_TTL_HOURS * 60 * 60 * 1000
     ).toISOString();
 
     const { error: sessionErr } = await supabase.from("sessions").insert({
-      user_id: userId,
+      user_id: authUserId,
       session_token: sessionToken,
       expires_at: expiresAt,
     });
 
     if (sessionErr) {
-      console.error("❌ Failed to create session:", sessionErr);
+      console.error("❌ Session creation failed:", sessionErr);
       return new Response("Session creation failed", { status: 500 });
     }
 
-    // 7) Set cookie and redirect to dashboard
+    // --- 8) Set cookie and redirect ---
     const response = NextResponse.redirect(`${siteUrl}/dashboard`);
 
     response.cookies.set("echo-session", sessionToken, {
@@ -160,7 +166,7 @@ export async function GET(req: Request) {
 
     return response;
   } catch (err) {
-    console.error("❌ Unhandled error in /auth/callback:", err);
+    console.error("❌ Unhandled /auth/callback error:", err);
     return new Response("Internal Server Error", { status: 500 });
   }
 }

@@ -12,7 +12,7 @@ export async function getUserFromSession() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  // Look up session
+  // 1) Get session
   const { data: session } = await supabase
     .from("sessions")
     .select("user_id")
@@ -21,12 +21,12 @@ export async function getUserFromSession() {
 
   if (!session) return null;
 
-  // Fetch user
-  const { data: user } = await supabase
-    .from("users")
+  // 2) Get user profile
+  const { data: profile } = await supabase
+    .from("profiles")
     .select("*")
     .eq("id", session.user_id)
     .maybeSingle();
 
-  return user ?? null;
+  return profile ?? null;
 }
