@@ -3,31 +3,47 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export function middleware(req: NextRequest) {
-  const pathname = req.nextUrl.pathname;
+  const { pathname } = req.nextUrl;
+  const sessionToken = req.cookies.get("echo-session")?.value;
 
-  // Allow public routes (auth + static)
+  // Routes that NEVER require auth
+  const PUBLIC_PATHS = new Set<string>([
+    "/",
+    "/auth/sign-in",
+    "/auth/redirect",
+    "/auth/callback",
+  ]);
+
   const isPublic =
-    pathname.startsWith("/auth") ||
-    pathname.startsWith("/api") ||
+    PUBLIC_PATHS.has(pathname) ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
     pathname.startsWith("/public");
 
   if (isPublic) {
+    console.log("MIDDLEWARE: public path", {
+      pathname,
+      hasSession: !!sessionToken,
+    });
     return NextResponse.next();
   }
 
-  // Check for session cookie
-  const sessionToken = req.cookies.get("echo-session")?.value;
-
   if (!sessionToken) {
-    const redirectUrl = req.nextUrl.clone();
-    redirectUrl.pathname = "/auth/sign-in";
-    redirectUrl.search = "";
-    return NextResponse.redirect(redirectUrl);
+    console.log("MIDDLEWARE: no session, redirecting to /auth/sign-in", {
+      pathname,
+    });
+
+    const url = req.nextUrl.clone();
+    url.pathname = "/auth/sign-in";
+    url.search = "";
+    return NextResponse.redirect(url);
   }
 
-  return NextResponse.next();}
+  console.log("MIDDLEWARE: authenticated", { pathname });
+  return NextResponse.next();
+}
+
+// Only protect actual app pages (homepage is left public)
 export const config = {
   matcher: [
     "/dashboard/:path*",

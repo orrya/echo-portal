@@ -13,13 +13,13 @@ export async function GET(req: Request) {
     const code = url.searchParams.get("code");
 
     if (!code) {
+      console.error("AUTH_CALLBACK: missing ?code param");
       return new Response("Missing authorization code", { status: 400 });
     }
 
     // --- ENV VARS ---
     const clientId =
-      process.env.AZURE_CLIENT_ID || process.env.NEXT_PUBLIC_AZURE_CLIENT_ID;
-
+      process.env.AZURE_CLIENT_ID ?? process.env.NEXT_PUBLIC_AZURE_CLIENT_ID;
     const clientSecret = process.env.AZURE_CLIENT_SECRET;
     const tenantId = process.env.AZURE_TENANT_ID || "common";
 
@@ -29,25 +29,29 @@ export async function GET(req: Request) {
     const redirectUri =
       process.env.AZURE_REDIRECT_URI ?? `${siteUrl}/auth/callback`;
 
-    console.log("🔎 ENV CHECK", {
+    console.log("AUTH_CALLBACK env check", {
+      clientIdPresent: !!clientId,
+      secretPresent: !!clientSecret,
+      tenantId,
       supabaseUrl,
-      serviceKey: serviceKey ? "present" : "missing",
       siteUrl,
       redirectUri,
-      clientId,
-      hasSecret: !!clientSecret,
-      tenantId,
     });
 
-    // --- 1) Exchange code for MS tokens ---
+    if (!clientId || !clientSecret || !supabaseUrl || !serviceKey || !siteUrl) {
+      console.error("AUTH_CALLBACK: missing required env vars");
+      return new Response("Server configuration error", { status: 500 });
+    }
+
+    // --- 1) Exchange Microsoft auth code for tokens ---
     const tokenRes = await fetch(
       `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
       {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
-          client_id: clientId!,
-          client_secret: clientSecret!,
+          client_id: clientId,
+          client_secret: clientSecret,
           grant_type: "authorization_code",
           code,
           redirect_uri: redirectUri,
@@ -58,7 +62,7 @@ export async function GET(req: Request) {
     const tokenJson = await tokenRes.json();
 
     if (!tokenRes.ok) {
-      console.error("❌ Token exchange failed:", tokenJson);
+      console.error("AUTH_CALLBACK: token exchange failed", tokenJson);
       return new Response("Token exchange failed", { status: 400 });
     }
 
@@ -72,10 +76,14 @@ export async function GET(req: Request) {
     });
 
     const profile = await profileRes.json();
-    const email = profile.mail ?? profile.userPrincipalName;
+
+    const email =
+      profile.mail ??
+      profile.userPrincipalName ??
+      undefined;
 
     if (!email) {
-      console.error("❌ Microsoft profile missing email:", profile);
+      console.error("AUTH_CALLBACK: Microsoft profile missing email", profile);
       return new Response("Microsoft profile error", { status: 400 });
     }
 
@@ -84,12 +92,12 @@ export async function GET(req: Request) {
       auth: { persistSession: false },
     });
 
-    // --- 4) Ensure auth user exists in Supabase ---
+    // --- 4) Ensure auth user exists in Supabase Auth ---
     const { data: userList, error: listErr } =
       await supabase.auth.admin.listUsers();
 
     if (listErr) {
-      console.error("❌ Error listing users:", listErr);
+      console.error("AUTH_CALLBACK: error listing users", listErr);
       return new Response("Auth lookup failed", { status: 400 });
     }
 
@@ -108,14 +116,14 @@ export async function GET(req: Request) {
         });
 
       if (createErr || !created?.user) {
-        console.error("❌ Failed to create auth user:", createErr);
+        console.error("AUTH_CALLBACK: failed to create auth user", createErr);
         return new Response("Failed to create auth user", { status: 500 });
       }
 
       authUserId = created.user.id;
     }
 
-    // --- 5) Upsert into profiles ---
+    // --- 5) Upsert into profiles table ---
     await supabase.from("profiles").upsert(
       {
         id: authUserId,
@@ -151,28 +159,29 @@ export async function GET(req: Request) {
     });
 
     if (sessionErr) {
-      console.error("❌ Session creation failed:", sessionErr);
+      console.error("AUTH_CALLBACK: session creation failed", sessionErr);
       return new Response("Session creation failed", { status: 500 });
     }
 
-    // --- 8) Set session cookie (NO DOMAIN!!!) ---
+    // --- 8) Set cookie (NO domain, so it works on previews + prod) ---
     const response = NextResponse.redirect(`${siteUrl}/dashboard`);
 
     response.cookies.set("echo-session", sessionToken, {
       httpOnly: true,
       secure: true,
-      sameSite: "none",
+      sameSite: "lax",
       path: "/",
-      // ❌ domain removed
+      maxAge: SESSION_TTL_HOURS * 60 * 60,
     });
 
-    console.log("🍪 COOKIE SET (auto domain)", {
-      value: sessionToken,
+    console.log("AUTH_CALLBACK: session + cookie set", {
+      authUserId,
+      siteUrl,
     });
 
     return response;
   } catch (err) {
-    console.error("❌ Unhandled /auth/callback error:", err);
+    console.error("AUTH_CALLBACK: unhandled error", err);
     return new Response("Internal Server Error", { status: 500 });
   }
 }

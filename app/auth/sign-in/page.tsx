@@ -1,3 +1,4 @@
+// app/auth/sign-in/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -7,6 +8,7 @@ export default function SignInPage() {
 
   const handleMicrosoft = () => {
     setLoading(true);
+    console.log("SIGN_IN: redirecting to /auth/redirect");
     // Let the server build the Azure URL
     window.location.href = "/auth/redirect";
   };
