@@ -175,12 +175,12 @@ export async function GET(req: Request) {
     });
 
     response.cookies.set("echo-session", sessionToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "lax",
-      path: "/"
-      // ❌ DO NOT SET DOMAIN — Vercel breaks cookies if you set this manually
-    });
+  httpOnly: true,
+  secure: true,
+  sameSite: "lax",
+  path: "/",
+  domain: ".echo.orrya.co.uk"
+});
 
     console.log("🍪 Cookie set OK");
 

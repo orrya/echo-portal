@@ -1,41 +1,41 @@
-import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+
+const PUBLIC_PATHS = [
+  "/auth/sign-in",
+  "/auth/callback",
+  "/favicon.ico",
+  "/api/auth/callback",
+];
 
 export function middleware(req: NextRequest) {
   const url = req.nextUrl.clone();
   const path = url.pathname;
 
-  // 🔥 1. HARD EXCLUDE AUTH PAGES
-  if (path.startsWith("/auth")) {
-    console.log("🟢 AUTH ROUTE — middleware skipped:", path);
+  // Debug log
+  console.log("🟦 MIDDLEWARE START");
+  console.log("➡️ Path:", path);
+
+  // Skip middleware for public routes
+  if (PUBLIC_PATHS.includes(path)) {
+    console.log("🟩 Middleware Skipped:", path);
     return NextResponse.next();
   }
 
-  // 🔥 2. EXCLUDE STATIC & PUBLIC FILES
-  if (
-    path.startsWith("/_next") ||
-    path.startsWith("/favicon") ||
-    path.startsWith("/assets") ||
-    path.startsWith("/api")
-  ) {
-    console.log("🟢 STATIC/API ROUTE — middleware skipped:", path);
-    return NextResponse.next();
-  }
-
-  // 🔥 3. CHECK COOKIE
   const session = req.cookies.get("echo-session");
+  console.log("🍪 Session Cookie:", session?.value ?? "❌ No cookie");
+
+  // If NO session cookie → redirect to sign-in
   if (!session) {
-    console.log("🔁 No session cookie — redirecting to /auth/sign-in", path);
-    url.pathname = "/auth/sign-in";
-    url.search = "";
-    return NextResponse.redirect(url);
+    console.log("🔁 No session cookie → redirecting to /auth/sign-in");
+    const signInUrl = new URL("/auth/sign-in", req.url);
+    return NextResponse.redirect(signInUrl);
   }
 
-  console.log("✔ Cookie found — allowed:", path);
+  console.log("🟢 Session exists → allow access");
   return NextResponse.next();
 }
 
-// 🔥 MATCH EVERYTHING — middleware will manually skip auth
 export const config = {
-  matcher: ["/:path*"],
+  matcher: ["/((?!_next|.*\\..*).*)"], // apply to all except static files
 };
