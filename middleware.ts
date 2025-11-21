@@ -3,24 +3,41 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export function middleware(req: NextRequest) {
-  const sessionToken = req.cookies.get("echo-session")?.value;
+  const pathname = req.nextUrl.pathname;
 
-  // If no session cookie, force sign-in
-  if (!sessionToken) {
-    const loginUrl = new URL("/auth/sign-in", req.url);
-    loginUrl.search = ""; // drop any old query
-    return NextResponse.redirect(loginUrl);
+  // Allow public routes (auth + static)
+  const isPublic =
+    pathname.startsWith("/auth") ||
+    pathname.startsWith("/api") ||
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/favicon") ||
+    pathname.startsWith("/public");
+
+  if (isPublic) {
+    return NextResponse.next();
   }
 
-  // Otherwise let the request through
+  // Check for session cookie
+  const sessionToken = req.cookies.get("echo-session")?.value;
+
+  if (!sessionToken) {
+    const redirectUrl = req.nextUrl.clone();
+    redirectUrl.pathname = "/auth/sign-in";
+    redirectUrl.search = "";
+    return NextResponse.redirect(redirectUrl);
+  }
+
   return NextResponse.next();
 }
 
-// Protect only these routes
+// Only protect actual app pages, nothing else
 export const config = {
   matcher: [
+    "/",
     "/dashboard/:path*",
     "/email/:path*",
     "/summary/:path*",
-    "/settings/:path*",],
+    "/settings/:path*",
+    "/activity/:path*",
+  ],
 };
