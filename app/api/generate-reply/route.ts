@@ -1,11 +1,11 @@
 // app/api/generate-reply/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getUserFromSession } from "@/lib/getUserFromSession";
+import { getUser } from "@/lib/getUser";
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await getUserFromSession();
+    const user = await getUser();
     if (!user) return new NextResponse("Unauthorized", { status: 401 });
 
     const { emailId } = await req.json();
