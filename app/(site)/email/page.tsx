@@ -1,5 +1,5 @@
 // app/(site)/email/page.tsx
-import { getUserFromSession } from "@/lib/getUserFromSession";
+import { getUser } from "@/lib/getUser";
 import { createClient } from "@supabase/supabase-js";
 import EmailClientShell from "./EmailClientShell";
 
@@ -16,7 +16,7 @@ function getBandForCategory(category: string | null) {
 }
 
 export default async function EmailPage() {
-  const user = await getUserFromSession();
+  const user = await getUser();
   console.log("EmailPage user:", user?.id);
 
   if (!user) {
