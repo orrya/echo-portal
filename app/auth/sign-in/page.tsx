@@ -1,17 +1,9 @@
 // app/auth/sign-in/page.tsx
 "use client";
 
-import { supabaseClient } from "@/lib/supabaseClient";
-
 export default function SignInPage() {
-  const handleSignIn = async () => {
-    await supabaseClient.auth.signInWithOAuth({
-      provider: "azure",
-      options: {
-        scopes: "openid email offline_access profile User.Read",
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
-      },
-    });
+  const handleSignIn = () => {
+    window.location.href = "/auth/redirect";
   };
 
   return (

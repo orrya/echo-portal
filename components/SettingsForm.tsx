@@ -9,7 +9,6 @@ export default function SettingsForm() {
   const [loading, setLoading] = useState(false);
   const [autoReply, setAutoReply] = useState(false);
 
-  /** Load settings */
   useEffect(() => {
     const fetchProfile = async () => {
       const {
@@ -33,7 +32,6 @@ export default function SettingsForm() {
     fetchProfile();
   }, []);
 
-  /** Save settings */
   const saveSettings = async () => {
     setLoading(true);
 
@@ -55,15 +53,9 @@ export default function SettingsForm() {
     setLoading(false);
   };
 
-  /** Microsoft OAuth – same flow as sign-in page */
-  const connectMicrosoft = async () => {
-    await supabaseClient.auth.signInWithOAuth({
-      provider: "azure",
-      options: {
-        scopes: "openid email offline_access profile User.Read",
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
-      },
-    });
+  /** Microsoft OAuth – same as sign-in page */
+  const connectMicrosoft = () => {
+    window.location.href = "/auth/redirect";
   };
 
   return (
@@ -97,7 +89,7 @@ export default function SettingsForm() {
         />
       </div>
 
-      {/* Auto-replies Group */}
+      {/* Auto Replies */}
       <div className="space-y-2">
         <p className="text-sm font-medium text-slate-200 tracking-wide">
           Auto-replies
@@ -130,9 +122,8 @@ export default function SettingsForm() {
         </div>
       </div>
 
-      {/* Action buttons */}
+      {/* Action Buttons */}
       <div className="flex flex-row justify-end gap-4 pt-4">
-        {/* Save button */}
         <button
           onClick={saveSettings}
           disabled={loading}
@@ -149,7 +140,6 @@ export default function SettingsForm() {
           {loading ? "Saving…" : "Save settings"}
         </button>
 
-        {/* Connect Microsoft */}
         <button
           onClick={connectMicrosoft}
           className="
