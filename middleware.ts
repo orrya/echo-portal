@@ -1,24 +1,26 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC_PATHS = [
+const PUBLIC_PATH_PREFIXES = [
   "/auth/sign-in",
   "/auth/callback",
-  "/favicon.ico",
+  "/auth/redirect", // <-- Added this path
   "/api/auth/callback",
+  "/favicon.ico", // Can be here for clarity, though matcher usually handles it
 ];
 
 export function middleware(req: NextRequest) {
-  const url = req.nextUrl.clone();
-  const path = url.pathname;
+  const path = req.nextUrl.pathname;
 
   // Debug log
   console.log("🟦 MIDDLEWARE START");
   console.log("➡️ Path:", path);
 
-  // Skip middleware for public routes
-  if (PUBLIC_PATHS.includes(path)) {
-    console.log("🟩 Middleware Skipped:", path);
+  // Use startsWith to check if the path is a public prefix
+  const isPublicPath = PUBLIC_PATH_PREFIXES.some(prefix => path.startsWith(prefix));
+
+  if (isPublicPath) {
+    console.log("🟩 Middleware Skipped (Public Prefix Match):", path);
     return NextResponse.next();
   }
 
@@ -29,6 +31,8 @@ export function middleware(req: NextRequest) {
   if (!session) {
     console.log("🔁 No session cookie → redirecting to /auth/sign-in");
     const signInUrl = new URL("/auth/sign-in", req.url);
+    // If you want to redirect back to the current page after successful login:
+    // signInUrl.searchParams.set("redirect", req.nextUrl.pathname); 
     return NextResponse.redirect(signInUrl);
   }
 
@@ -37,5 +41,6 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next|.*\\..*).*)"], // apply to all except static files
+  // Apply to all except Next.js internal files, static assets, etc.
+  matcher: ["/((?!_next|.*\\..*).*)"],
 };

@@ -120,7 +120,6 @@ export async function GET(req: Request) {
         return new Response("Failed to create auth user", { status: 500 });
       }
 
-      // ✅ FIXED LINE
       authUserId = created.data.user.id;
     }
 
@@ -171,16 +170,18 @@ export async function GET(req: Request) {
 
     console.log("➡️ Setting cookie...", {
       siteUrl,
-      domain: req.headers.get("host")
+      host: req.headers.get("host")
     });
 
     response.cookies.set("echo-session", sessionToken, {
-  httpOnly: true,
-  secure: true,
-  sameSite: "lax",
-  path: "/",
-  domain: ".echo.orrya.co.uk"
-});
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+      // CRITICAL FIX: Removed the 'domain' attribute. 
+      // The browser will now set the correct host domain.
+      // domain: ".echo.orrya.co.uk" <-- Removed!
+    });
 
     console.log("🍪 Cookie set OK");
 
