@@ -1,3 +1,4 @@
+// components/SettingsForm.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -54,9 +55,15 @@ export default function SettingsForm() {
     setLoading(false);
   };
 
-  /** Microsoft OAuth */
-  const connectMicrosoft = () => {
-    window.location.href = "/auth/redirect";
+  /** Microsoft OAuth – same flow as sign-in page */
+  const connectMicrosoft = async () => {
+    await supabaseClient.auth.signInWithOAuth({
+      provider: "azure",
+      options: {
+        scopes: "openid email offline_access profile User.Read",
+        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
+      },
+    });
   };
 
   return (

@@ -11,11 +11,17 @@ export async function GET(req: NextRequest) {
 
   if (code) {
     const supabase = createRouteHandlerClient({ cookies });
-    // Supabase handles exchanging the code + setting sb-* cookies
-    await supabase.auth.exchangeCodeForSession(code);
+
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+
+    if (error) {
+      console.error("exchangeCodeForSession error:", error);
+      const redirectUrl = new URL("/auth/sign-in", requestUrl.origin);
+      redirectUrl.searchParams.set("error", "auth_failed");
+      return NextResponse.redirect(redirectUrl);
+    }
   }
 
-  const base =
-    process.env.NEXT_PUBLIC_SITE_URL || `${requestUrl.protocol}//${requestUrl.host}`;
-  return NextResponse.redirect(`${base}/dashboard`);
+  // At this point the Supabase `sb-` cookies are set on echo.orrya.co.uk
+  return NextResponse.redirect(new URL("/dashboard", requestUrl.origin));
 }
