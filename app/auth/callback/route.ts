@@ -1,3 +1,10 @@
+console.log("🔎 ENV CHECK", {
+  supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?
+    "present" : "MISSING",
+  siteUrl: process.env.NEXT_PUBLIC_SITE_URL,
+  redirectUri: process.env.AZURE_REDIRECT_URI,
+});
 // app/auth/callback/route.ts
 export const dynamic = "force-dynamic";
 
