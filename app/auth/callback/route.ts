@@ -11,6 +11,7 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const code = url.searchParams.get("code");
+    const origin = url.origin; // current deployment origin
 
     if (!code) {
       return new Response("Missing authorization code", { status: 400 });
@@ -18,19 +19,18 @@ export async function GET(req: Request) {
 
     // --- ENV VARS ---
     const clientId =
-      process.env.AZURE_CLIENT_ID ||
-      process.env.NEXT_PUBLIC_AZURE_CLIENT_ID;
-
+      process.env.AZURE_CLIENT_ID || process.env.NEXT_PUBLIC_AZURE_CLIENT_ID;
     const clientSecret = process.env.AZURE_CLIENT_SECRET;
     const tenantId = process.env.AZURE_TENANT_ID || "common";
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL!;
-    const redirectUri =
-      process.env.AZURE_REDIRECT_URI ?? `${siteUrl}/auth/callback`;
 
-    if (!clientId || !clientSecret || !supabaseUrl || !serviceKey || !siteUrl) {
+    // redirect URI must match what we used in /auth/redirect
+    const redirectUri =
+      process.env.AZURE_REDIRECT_URI ?? `${origin}/auth/callback`;
+
+    if (!clientId || !clientSecret || !supabaseUrl || !serviceKey) {
       console.error("❌ Missing required env vars");
       return new Response("Server configuration error", { status: 500 });
     }
@@ -72,9 +72,7 @@ export async function GET(req: Request) {
     const profile = await profileRes.json();
 
     const email =
-      profile.mail ??
-      profile.userPrincipalName ??
-      undefined;
+      profile.mail ?? profile.userPrincipalName ?? undefined;
 
     if (!email) {
       console.error("❌ Microsoft profile missing email:", profile);
@@ -89,7 +87,7 @@ export async function GET(req: Request) {
     // --- 4) Ensure auth user exists in Supabase Auth ---
     let authUserId: string | undefined;
 
-    // Safe + Vercel compatible: list & find user by email
+    // Vercel-safe: list users & find by email
     const { data: userList, error: listErr } =
       await supabase.auth.admin.listUsers();
 
@@ -103,9 +101,7 @@ export async function GET(req: Request) {
     );
 
     if (match) {
-      authUserId = match.id;
-    } else {
-      // Create auth user
+      authUserId = match.id;} else {
       const { data: created, error: createErr } =
         await supabase.auth.admin.createUser({
           email,
@@ -162,13 +158,13 @@ export async function GET(req: Request) {
       return new Response("Session creation failed", { status: 500 });
     }
 
-    // --- 8) Set cookie and redirect ---
-    const response = NextResponse.redirect(`${siteUrl}/dashboard`);
+    // --- 8) Set cookie and redirect to /dashboard on SAME origin ---
+    const response = NextResponse.redirect(new URL("/dashboard", origin));
 
     response.cookies.set("echo-session", sessionToken, {
       httpOnly: true,
       secure: true,
-     sameSite: "none",
+      sameSite: "lax", // we are same-site
       path: "/",
       maxAge: SESSION_TTL_HOURS * 60 * 60,
     });

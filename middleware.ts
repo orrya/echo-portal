@@ -1,41 +1,26 @@
+// middleware.ts
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export function middleware(req: NextRequest) {
-  const pathname = req.nextUrl.pathname;
-
-  // --- Allow public + special routes ---
-  if (
-    pathname.startsWith("/auth") || 
-    pathname.startsWith("/api") ||
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon") ||
-    pathname.startsWith("/public")
-  ) {
-    return NextResponse.next();
-  }
-
-  // --- Custom session cookie check ---
   const sessionToken = req.cookies.get("echo-session")?.value;
 
+  // If no session cookie, force sign-in
   if (!sessionToken) {
-    const redirectUrl = req.nextUrl.clone();
-    redirectUrl.pathname = "/auth/sign-in";
-    redirectUrl.search = "";
-    return NextResponse.redirect(redirectUrl);
+    const loginUrl = new URL("/auth/sign-in", req.url);
+    loginUrl.search = ""; // drop any old query
+    return NextResponse.redirect(loginUrl);
   }
 
+  // Otherwise let the request through
   return NextResponse.next();
 }
 
-// --- Clean matcher: protect only actual app pages ---
+// Protect only these routes
 export const config = {
   matcher: [
     "/dashboard/:path*",
     "/email/:path*",
     "/summary/:path*",
-    "/settings/:path*",
-    "/activity/:path*",
-    "/((?!_next|favicon.ico|auth|api).*)",
-  ],
+    "/settings/:path*",],
 };
