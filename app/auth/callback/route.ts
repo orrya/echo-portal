@@ -159,22 +159,18 @@ export async function GET(req: Request) {
       return new Response("Session creation failed", { status: 500 });
     }
 
-    // --- 8) Set cookie with REQUIRED domain ---
+    // --- 8) Set cookie and redirect ---
     const response = NextResponse.redirect(`${siteUrl}/dashboard`);
 
     response.cookies.set("echo-session", sessionToken, {
       httpOnly: true,
       secure: true,
-      sameSite: "none",
-      domain: "echo-portal.vercel.app", // 🔥 REQUIRED FIX
+      sameSite: "lax", // important for redirects
       path: "/",
       maxAge: SESSION_TTL_HOURS * 60 * 60,
     });
 
-    console.log("🍪 COOKIE SET:", {
-      domain: "echo-portal.vercel.app",
-      value: sessionToken,
-    });
+    console.log("🍪 COOKIE SET (no domain)", { value: sessionToken });
 
     return response;
   } catch (err) {
