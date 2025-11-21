@@ -168,10 +168,18 @@ export async function GET(req: Request) {
     // --- 8) Set cookie ---
     const response = NextResponse.redirect(`${siteUrl}/dashboard`);
 
-    console.log("➡️ Setting cookie...", {
-      siteUrl,
-      host: req.headers.get("host")
-    });
+    // Calculate expiration date in seconds
+    const maxAgeSeconds = SESSION_TTL_HOURS * 60 * 60;
+    const expiresDate = new Date(Date.now() + maxAgeSeconds * 1000);
+
+    // CRITICAL: Using the raw header, WITHOUT the 'domain' attribute.
+    const cookieHeader = `echo-session=${sessionToken}; Path=/; Expires=${expiresDate.toUTCString()}; HttpOnly; Secure; SameSite=Lax`;
+
+    response.headers.set('Set-Cookie', cookieHeader);
+    
+    console.log("🍪 Cookie set OK with header:", cookieHeader);
+
+    return response;
 
     response.cookies.set("echo-session", sessionToken, {
       httpOnly: true,
