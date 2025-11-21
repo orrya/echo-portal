@@ -56,13 +56,11 @@ export default function SettingsForm() {
 
   /** Microsoft OAuth */
   const connectMicrosoft = () => {
-  window.location.href = "/auth/redirect";
-};
+    window.location.href = "/auth/redirect";
   };
 
   return (
     <div className="space-y-10">
-
       {/* Preferred Tone */}
       <div className="space-y-3">
         <label
@@ -127,7 +125,6 @@ export default function SettingsForm() {
 
       {/* Action buttons */}
       <div className="flex flex-row justify-end gap-4 pt-4">
-
         {/* Save button */}
         <button
           onClick={saveSettings}
