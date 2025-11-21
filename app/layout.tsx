@@ -1,30 +1,35 @@
-// app/(site)/layout.tsx
-import { ReactNode } from "react";
-import NavBar from "@/components/NavBar";
-import { SupabaseProvider } from "@/components/SupabaseProvider";
-import { getUserFromSession } from "@/lib/getUserFromSession";
-import { redirect } from "next/navigation";
+import { Inter } from 'next/font/google';
+import type { Metadata } from 'next';
+import { ReactNode } from 'react';
 
-export default async function SiteLayout({
+// Assuming you have a global CSS file where Tailwind is imported
+import '@/app/globals.css'; 
+
+const inter = Inter({ subsets: ['latin'] });
+
+export const metadata: Metadata = {
+  title: 'Echo Suite | Orrya',
+  description: 'Quiet tools for louder thinking. The intelligence layer for your Microsoft 365 data.',
+};
+
+/**
+ * The Root Layout wraps the entire application.
+ * * IMPORTANT: This layout MUST NOT contain any authentication checks or redirects,
+ * as it wraps the /auth/sign-in page, which would cause an infinite loop.
+ * Authentication logic belongs in the specific sub-layouts (like app/(site)/layout.tsx).
+ */
+export default function RootLayout({
   children,
 }: {
   children: ReactNode;
 }) {
-  const user = await getUserFromSession();
-
-  // If no session → send to sign-in
-  if (!user) {
-    redirect("/auth/sign-in");
-  }
-
-  // If you want the NavBar to know about the user later,
-  // you can pass it via props or context; for now we just render.
   return (
-    <SupabaseProvider>
-      <NavBar />
-      <main className="relative z-10 max-w-6xl mx-auto px-6 py-12 text-slate-200">
+    <html lang="en">
+      <body className={inter.className}>
+        {/* The entire application content, including both protected and public routes, 
+            is rendered here. The session checks are handled by the nested layouts/middleware. */}
         {children}
-      </main>
-    </SupabaseProvider>
+      </body>
+    </html>
   );
 }
