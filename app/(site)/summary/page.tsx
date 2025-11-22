@@ -1,5 +1,20 @@
+// app/(site)/summary/page.tsx
 import { getUser } from "@/lib/getUser";
 import { createClient } from "@supabase/supabase-js";
+
+type UiSummary = {
+  summary_date: string; // e.g. "2025-11-20"
+  time_of_day: "am" | "pm";
+  content: string;
+};
+
+function normaliseMode(mode: string | null | undefined): "am" | "pm" {
+  const m = (mode ?? "").toLowerCase();
+  if (m.startsWith("am")) return "am";
+  if (m.startsWith("pm")) return "pm";
+  // fallback – most of your data is PM right now
+  return "pm";
+}
 
 export default async function SummaryPage() {
   const user = await getUser();
@@ -23,20 +38,40 @@ export default async function SummaryPage() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  // ✔️ Fetch rows from daily_summaries
+  // 1) Fetch from daily_summaries
   const { data: raw } = await supabase
     .from("daily_summaries")
     .select("*")
     .eq("user_id", user.id)
     .order("Date", { ascending: false });
 
-  // ✔️ Map into UI format
-  const summaries =
-    raw?.map((row) => ({
-      summary_date: row.Date,       // your Date column
-      time_of_day: "pm",            // you can refine this later
-      content: row.Summary ?? "",   // your Summary column
+  // 2) Map into UI-friendly shape
+  const summaries: UiSummary[] =
+    raw?.map((row: any) => ({
+      summary_date: row.Date as string, // your "Date" column
+      time_of_day: normaliseMode(row.Mode), // your "Mode" column
+      content: (row["Reflection Summary"] as string) ?? "",
     })) ?? [];
+
+  // 3) Work out "today" / "yesterday" cards (Option B)
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10); // "YYYY-MM-DD"
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const yesterdayStr = yesterday.toISOString().slice(0, 10);
+
+  const isMorningNow = now.getHours() < 14; // tweak cutoff if you like
+
+  const findSummary = (date: string, mode: "am" | "pm") =>
+    summaries.find(
+      (s) => s.summary_date === date && s.time_of_day === mode
+    ) ?? null;
+
+  const todayAm = findSummary(todayStr, "am");
+  const todayPm = findSummary(todayStr, "pm");
+  const yesterdayPm = findSummary(yesterdayStr, "pm");
+
+  const amCard = isMorningNow ? todayAm : todayAm;
+  const pmCard = isMorningNow ? yesterdayPm : todayPm;
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-16 space-y-14">
@@ -100,7 +135,7 @@ export default async function SummaryPage() {
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
-            {/* AM */}
+            {/* AM CARD */}
             <div
               className="
                 rounded-xl p-5
@@ -108,17 +143,29 @@ export default async function SummaryPage() {
                 border border-white/10
                 shadow-[0_0_22px_rgba(255,255,255,0.04)]
                 backdrop-blur-xl
+                bg-[linear-gradient(to_bottom,rgba(255,255,255,0.05),rgba(255,255,255,0.015))]
               "
             >
               <h3 className="text-sm font-semibold text-white/90 tracking-wide mb-1">
                 AM Summary
               </h3>
-              <p className="text-xs text-slate-400/90">
-                No morning summary yet.
-              </p>
+              {amCard ? (
+                <>
+                  <p className="text-[11px] text-slate-400/90 mb-1">
+                    {amCard.summary_date} · Morning
+                  </p>
+                  <p className="text-xs text-slate-200/90 leading-relaxed line-clamp-4 whitespace-pre-line">
+                    {amCard.content}
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-slate-400/90">
+                  No morning summary yet.
+                </p>
+              )}
             </div>
 
-            {/* PM */}
+            {/* PM CARD */}
             <div
               className="
                 rounded-xl p-5
@@ -126,19 +173,32 @@ export default async function SummaryPage() {
                 border border-white/10
                 shadow-[0_0_22px_rgba(255,255,255,0.04)]
                 backdrop-blur-xl
+                bg-[linear-gradient(to_bottom,rgba(255,255,255,0.05),rgba(255,255,255,0.015))]
               "
             >
               <h3 className="text-sm font-semibold text-white/90 tracking-wide mb-1">
                 PM Summary
               </h3>
-              <p className="text-xs text-slate-400/90">
-                No evening summary yet.
-              </p>
+              {pmCard ? (
+                <>
+                  <p className="text-[11px] text-slate-400/90 mb-1">
+                    {pmCard.summary_date} · Evening
+                  </p>
+                  <p className="text-xs text-slate-200/90 leading-relaxed line-clamp-4 whitespace-pre-line">
+                    {pmCard.content}
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-slate-400/90">
+                  No evening summary yet.
+                </p>
+              )}
             </div>
           </div>
 
           <p className="text-[11px] text-slate-400/80 mt-3">
-            Echo will generate AM/PM summaries once connected to Microsoft 365.
+            Echo will keep today’s AM/PM snapshots here so you can see the day
+            at a glance.
           </p>
         </div>
       </div>
@@ -159,7 +219,7 @@ export default async function SummaryPage() {
             <ul className="space-y-4 text-sm sm:text-[15px] text-slate-100/95">
               {summaries.map((summary) => (
                 <li
-                  key={`${summary.summary_date}-${summary.time_of_day}`}
+                  key={`${summary.summary_date}-${summary.time_of_day}-${summary.content.slice(0,16)}`}
                   className="border-b border-white/10 last:border-none pb-4 last:pb-0"
                 >
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
