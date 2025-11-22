@@ -23,15 +23,23 @@ export default async function SummaryPage() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const { data: summaries } = await supabase
-    .from("summaries")
+  // ✔️ Fetch rows from daily_summaries
+  const { data: raw } = await supabase
+    .from("daily_summaries")
     .select("*")
     .eq("user_id", user.id)
-    .order("summary_date", { ascending: false })
-    .order("time_of_day", { ascending: true });
+    .order("Date", { ascending: false });
+
+  // ✔️ Map into UI format
+  const summaries =
+    raw?.map((row) => ({
+      summary_date: row.Date,       // your Date column
+      time_of_day: "pm",            // you can refine this later
+      content: row.Summary ?? "",   // your Summary column
+    })) ?? [];
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-16 space-y-14">
-
       {/* Eyebrow Label */}
       <p className="text-[11px] font-semibold tracking-[0.28em] text-slate-300/90">
         ECHO · DAILY SUMMARIES
@@ -63,7 +71,7 @@ export default async function SummaryPage() {
         </p>
 
         <p className="text-xs text-slate-400/90 pt-1">
-          {summaries && summaries.length > 0
+          {summaries.length > 0
             ? `${summaries.length} summaries stored for your account.`
             : "No summaries have been generated yet – once Echo is connected, they will appear here."}
         </p>
@@ -83,15 +91,14 @@ export default async function SummaryPage() {
             [border-image:linear-gradient(120deg,rgba(148,163,255,0.5),rgba(56,189,248,0.5))1]
             shadow-[0_20px_70px_rgba(0,0,0,0.55)]
             p-6 sm:p-7
-            bg-[linear-gradient(to_bottom,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]">
+          "
+        >
           <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(0,0,0,0.45)]" />
 
-          {/* Eyebrow */}
           <p className="text-[11px] font-semibold tracking-[0.22em] text-slate-300/75 mb-3">
             TODAY · ECHO AM / PM
           </p>
 
-          {/* AM + PM BLOCKS */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
             {/* AM */}
             <div
@@ -101,7 +108,6 @@ export default async function SummaryPage() {
                 border border-white/10
                 shadow-[0_0_22px_rgba(255,255,255,0.04)]
                 backdrop-blur-xl
-                bg-[linear-gradient(to_bottom,rgba(255,255,255,0.05),rgba(255,255,255,0.015))]
               "
             >
               <h3 className="text-sm font-semibold text-white/90 tracking-wide mb-1">
@@ -120,7 +126,6 @@ export default async function SummaryPage() {
                 border border-white/10
                 shadow-[0_0_22px_rgba(255,255,255,0.04)]
                 backdrop-blur-xl
-                bg-[linear-gradient(to_bottom,rgba(255,255,255,0.05),rgba(255,255,255,0.015))]
               "
             >
               <h3 className="text-sm font-semibold text-white/90 tracking-wide mb-1">
@@ -132,7 +137,6 @@ export default async function SummaryPage() {
             </div>
           </div>
 
-          {/* Microcopy */}
           <p className="text-[11px] text-slate-400/80 mt-3">
             Echo will generate AM/PM summaries once connected to Microsoft 365.
           </p>
@@ -151,7 +155,7 @@ export default async function SummaryPage() {
             rounded-2xl backdrop-blur-xl bg-white/[0.06]
           "
         >
-          {summaries && summaries.length > 0 ? (
+          {summaries.length > 0 ? (
             <ul className="space-y-4 text-sm sm:text-[15px] text-slate-100/95">
               {summaries.map((summary) => (
                 <li
