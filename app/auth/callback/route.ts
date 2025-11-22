@@ -13,25 +13,27 @@ export async function GET(req: Request) {
   const authCode = url.searchParams.get("code");
 
   if (!authCode) {
-    console.error("Missing `code` in Azure redirect");
+    console.error("Missing ?code from Azure");
     return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=missing_code`);
   }
 
-  const tenantId = process.env.AZURE_TENANT_ID || "common";
+  // -------------------------
+  // 1) Azure token exchange
+  // -------------------------
+  const tenant = process.env.AZURE_TENANT_ID || "common";
   const clientId =
     process.env.AZURE_CLIENT_ID || process.env.NEXT_PUBLIC_AZURE_CLIENT_ID;
   const clientSecret = process.env.AZURE_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    console.error("Azure env vars missing");
+    console.error("Azure credentials missing");
     return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=azure_config`);
   }
 
   const redirectUri = `${siteUrl}/auth/callback`;
 
-  // 1) Exchange code for tokens
   const tokenRes = await fetch(
-    `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
+    `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`,
     {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -46,104 +48,122 @@ export async function GET(req: Request) {
   );
 
   const tokenData = await tokenRes.json();
-
   if (!tokenRes.ok) {
     console.error("Azure token exchange failed:", tokenData);
     return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=token_exchange`);
   }
 
-  const accessToken: string = tokenData.access_token;
-  const refreshToken: string | undefined = tokenData.refresh_token;
-  const expiresIn: number = tokenData.expires_in ?? 3600;
+  const accessToken = tokenData.access_token;
+  const refreshToken = tokenData.refresh_token ?? null;
+  const expiresIn = tokenData.expires_in ?? 3600;
 
+  // -------------------------
   // 2) Fetch Microsoft profile
+  // -------------------------
   const profileRes = await fetch("https://graph.microsoft.com/v1.0/me", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   const profile = await profileRes.json();
 
-  const email: string | undefined =
+  const email =
     profile.mail ||
     profile.userPrincipalName ||
-    (Array.isArray(profile.otherMails) ? profile.otherMails[0] : undefined);
+    (Array.isArray(profile.otherMails) ? profile.otherMails[0] : null);
 
   if (!email) {
-    console.error("No usable email in Microsoft profile:", profile);
+    console.error("Azure profile returned no usable email:", profile);
     return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=no_email`);
   }
 
+  // -------------------------
   // 3) Supabase admin client
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  // -------------------------
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } }
+  );
 
-  const admin = createClient(supabaseUrl, serviceRole, {
-    auth: { persistSession: false },
-  });
-
+  // -------------------------
   // 4) Find or create user
-  const { data: listData } = await admin.auth.admin.listUsers();
+  // -------------------------
+  const { data: list } = await supabase.auth.admin.listUsers();
   let user =
-    listData?.users.find(
-      (u) => u.email?.toLowerCase() === email.toLowerCase()
-    ) ?? null;
+    list?.users.find((u) => u.email?.toLowerCase() === email.toLowerCase()) ??
+    null;
 
   if (!user) {
-    const { data, error } = await admin.auth.admin.createUser({
+    const { data, error } = await supabase.auth.admin.createUser({
       email,
       email_confirm: true,
     });
-
     if (error || !data?.user) {
-      console.error("Failed creating Supabase user:", error);
+      console.error("Failed to create Supabase user:", error);
       return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=create_user`);
     }
-
     user = data.user;
   }
 
-  // 5) Store tokens + profile in your own tables
-  const expiresAtIso = new Date(Date.now() + expiresIn * 1000).toISOString();
+  // -------------------------
+  // 5) Store MS tokens + profile
+  // -------------------------
+  const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
-  await admin.from("profiles").upsert({
+  await supabase.from("profiles").upsert({
     id: user.id,
     display_name: profile.displayName ?? null,
   });
 
-  await admin.from("user_connections").upsert({
+  await supabase.from("user_connections").upsert({
     user_id: user.id,
-    provider: "azure", // <- consistent provider name
+    provider: "azure",
     access_token: accessToken,
-    refresh_token: refreshToken ?? null,
-    expires_at: expiresAtIso,
+    refresh_token: refreshToken,
+    expires_at: expiresAt,
   });
 
-  // 6) Create a Supabase session for this user
-  const adminAuth: any = (admin as any).auth.admin;
-  const { data: sessionData, error: sessionErr } =
-    await adminAuth.createSessionForUser({
-      user_id: user.id,
+  // -------------------------
+  // 6) Generate magic link to create Supabase session
+  // -------------------------
+  const { data: linkData, error: linkErr } =
+    await supabase.auth.admin.generateLink({
+      type: "magiclink",
+      email,
     });
 
-  if (sessionErr || !sessionData?.session) {
-    console.error("createSessionForUser error:", sessionErr);
-    return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=session_err`);
+  if (linkErr || !linkData) {
+    console.error("generateLink error:", linkErr);
+    return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=generate_link`);
   }
 
-  const session = sessionData.session;
+  // Real token lives here, NOT .token
+  const oneTimeToken =
+    (linkData.properties as any)?.email_otp ??
+    (linkData.properties as any)?.hashed_token ??
+    null;
 
-  // 7) Write Supabase auth cookies
-  const res = NextResponse.redirect(`${siteUrl}/dashboard`);
+  if (!oneTimeToken) {
+    console.error("Missing magic link token:", linkData);
+    return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=no_token`);
+  }
+
+  // -------------------------
+  // 7) Create session via setSession
+  // -------------------------
   const routeClient = createRouteHandlerClient({ cookies });
 
-  const { error: writeError } = await routeClient.auth.setSession({
-    access_token: session.access_token,
-    refresh_token: session.refresh_token,
+  const { error: sessionErr } = await routeClient.auth.setSession({
+    access_token: accessToken,
+    refresh_token: refreshToken,
   });
 
-  if (writeError) {
-    console.error("setSession error:", writeError);
-    return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=cookie_write`);
+  if (sessionErr) {
+    console.error("setSession error:", sessionErr);
+    return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=session_write`);
   }
 
-  return res;
+  // -------------------------
+  // 8) Redirect to dashboard
+  // -------------------------
+  return NextResponse.redirect(`${siteUrl}/dashboard`);
 }
