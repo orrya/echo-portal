@@ -3,22 +3,23 @@ import { getUser } from "@/lib/getUser";
 import { createClient } from "@supabase/supabase-js";
 import EmailClientShell from "./EmailClientShell";
 
-// 🔥 Correct category → band mapping
 function getBandForCategory(category: string | null) {
   const c = (category ?? "").toLowerCase().trim();
 
-  if (c === "follow-up" || c.includes("follow")) return "follow_up";
-  if (c === "informational" || c.includes("info") || c.includes("promo") || c.includes("newsletter")) {
+  if (c.includes("follow")) return "follow_up";
+  if (
+    c.includes("info") ||
+    c.includes("promo") ||
+    c.includes("newsletter") ||
+    c === "informational"
+  )
     return "noise";
-  }
 
-  return "action"; // default
+  return "action";
 }
 
 export default async function EmailPage() {
   const user = await getUser();
-  console.log("EmailPage user:", user?.id);
-
   if (!user) {
     return (
       <div className="mx-auto max-w-4xl px-6 py-20 text-center">
@@ -46,66 +47,52 @@ export default async function EmailPage() {
 
   const all = emails ?? [];
 
-  // 🎯 FIXED: Proper band grouping
-  const actionEmails = all.filter(
+  // --- Filter only unresolved for card counts ---
+  const unresolved = all.filter(
+    (e) => !e["Email Status"] || e["Email Status"]?.toLowerCase() !== "resolved"
+  );
+
+  const actionEmails = unresolved.filter(
     (e) => getBandForCategory(e.Category) === "action"
   );
 
-  const followUpEmails = all.filter(
+  const followUpEmails = unresolved.filter(
     (e) => getBandForCategory(e.Category) === "follow_up"
   );
 
-  const noiseEmails = all.filter(
+  const noiseEmails = unresolved.filter(
     (e) => getBandForCategory(e.Category) === "noise"
   );
 
-  const total = all.length;
-
   return (
     <div className="mx-auto max-w-6xl px-6 py-20 space-y-12">
-      {/* Eyebrow */}
       <p className="text-[11px] font-semibold tracking-[0.28em] text-slate-300/80">
         ECHO · EMAIL INTELLIGENCE
       </p>
 
-      {/* Hero */}
       <div className="space-y-4 max-w-3xl">
-        <h1
-          className="
-            text-white text-3xl sm:text-4xl lg:text-[2.4rem]
-            font-semibold leading-tight
-            drop-shadow-[0_0_18px_rgba(0,0,0,0.5)]
-          "
-        >
+        <h1 className="text-white text-3xl sm:text-4xl lg:text-[2.4rem] font-semibold leading-tight">
           A calmer view of your{" "}
-          <span
-            className="
-              bg-[linear-gradient(120deg,#f4a8ff,#beb5fd,#3abdf8)]
-              bg-clip-text text-transparent
-            "
-          >
+          <span className="bg-[linear-gradient(120deg,#f4a8ff,#beb5fd,#3abdf8)] bg-clip-text text-transparent">
             inbox.
           </span>
         </h1>
 
         <p className="max-w-2xl text-slate-200/90 sm:text-base leading-relaxed">
-          Echo will sit above your Microsoft 365 inbox and quietly organise
-          everything into clear priority bands. Below is a preview of how your
-          email signal will be grouped.
+          Echo quietly organises your inbox into focused priority bands.
         </p>
 
         <p className="text-xs text-slate-400/90 pt-1">
-          {total === 0
+          {all.length === 0
             ? "No email records have been synced to Echo yet."
-            : `${total} messages processed · ${actionEmails.length} action · ${followUpEmails.length} follow-up · ${noiseEmails.length} noise`}
+            : `${all.length} messages processed · ${actionEmails.length} action · ${followUpEmails.length} follow-up · ${noiseEmails.length} noise`}
         </p>
       </div>
 
-      {/* Category cards + drawer */}
       <EmailClientShell
-        actionEmails={actionEmails}
-        followUpEmails={followUpEmails}
-        noiseEmails={noiseEmails}
+        actionEmails={all}
+        followUpEmails={all}
+        noiseEmails={all}
       />
     </div>
   );
