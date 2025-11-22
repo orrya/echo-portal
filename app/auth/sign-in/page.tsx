@@ -10,7 +10,6 @@ export default function SignInPage() {
     await supabaseClient.auth.signInWithOAuth({
       provider: "azure",
       options: {
-        scopes: "openid email offline_access profile User.Read",
         redirectTo: `${SITE_URL}/auth/callback`, // IMPORTANT
       },
     });
