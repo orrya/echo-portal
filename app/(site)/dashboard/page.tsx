@@ -2,6 +2,21 @@ import { getUser } from "@/lib/getUser";
 import { createClient } from "@supabase/supabase-js";
 import { Zap, Mail, Bell } from "lucide-react";
 
+type DailySummaryRow = {
+  Date: string;
+  Mode?: string | null;
+  // other fields ignored here
+};
+
+type EmailRecordRow = {
+  Category: string | null;
+  "Email Status"?: string | null;
+  "Date Received"?: string | null;
+  Subject?: string | null;
+  From?: string | null;
+  Summary?: string | null;
+};
+
 export default async function DashboardPage() {
   const user = await getUser();
 
@@ -25,30 +40,42 @@ export default async function DashboardPage() {
   );
 
   // ---- SUMMARY STATUS ----
-  const { data: summaryRows } = await supabase
+  const { data: summaryRowsRaw } = await supabase
     .from("daily_summaries")
     .select("*")
     .eq("user_id", user.id)
     .order("Date", { ascending: false });
 
+  const summaryRows = (summaryRowsRaw ?? []) as DailySummaryRow[];
+
   const todayStr = new Date().toISOString().slice(0, 10);
 
-  const todayAM = summaryRows?.find(
-    (r) => r.Date.startsWith(todayStr) && (r.Mode?.toLowerCase() === "am")
+  const todayAM = summaryRows.find(
+    (r) =>
+      r.Date.startsWith(todayStr) &&
+      (r.Mode?.toLowerCase() === "am" || r.Mode?.toLowerCase() === "morning")
   );
 
-  const todayPM = summaryRows?.find(
-    (r) => r.Date.startsWith(todayStr) && (r.Mode?.toLowerCase() === "pm")
+  const todayPM = summaryRows.find(
+    (r) =>
+      r.Date.startsWith(todayStr) &&
+      (r.Mode?.toLowerCase() === "pm" || r.Mode?.toLowerCase() === "evening")
   );
 
-  const nextWindow =
-    new Date().getHours() < 12 ? "8:00 AM" : "5:00 PM";
+  const nextWindow = new Date().getHours() < 12 ? "8:00 AM" : "5:00 PM";
 
-  // ---- EMAIL BANDS ----
-  const { data: emails } = await supabase
+  // ---- EMAIL BANDS (UNRESOLVED ONLY) ----
+  const { data: emailsRaw } = await supabase
     .from("email_records")
-    .select("Category")
+    .select('Category,"Email Status","Date Received",Subject,From,Summary')
     .eq("user_id", user.id);
+
+  const emails = (emailsRaw ?? []) as EmailRecordRow[];
+
+  // unresolved = anything NOT explicitly "Resolved"
+  const unresolvedEmails = emails.filter(
+    (e) => e["Email Status"] !== "Resolved"
+  );
 
   const getBand = (c: string | null) => {
     if (!c) return "action";
@@ -59,16 +86,38 @@ export default async function DashboardPage() {
       cc.includes("promo") ||
       cc.includes("newsletter") ||
       cc === "informational"
-    )
+    ) {
       return "noise";
+    }
     return "action";
   };
 
-  const actionCount = emails?.filter((e) => getBand(e.Category) === "action").length ?? 0;
-  const followCount = emails?.filter((e) => getBand(e.Category) === "follow_up").length ?? 0;
-  const noiseCount = emails?.filter((e) => getBand(e.Category) === "noise").length ?? 0;
+  const unresolvedAction = unresolvedEmails.filter(
+    (e) => getBand(e.Category) === "action"
+  );
+  const unresolvedFollow = unresolvedEmails.filter(
+    (e) => getBand(e.Category) === "follow_up"
+  );
+  const unresolvedNoise = unresolvedEmails.filter(
+    (e) => getBand(e.Category) === "noise"
+  );
 
-  const isConnected = emails && emails.length > 0;
+  const outstandingActionCount = unresolvedAction.length;
+  const followCount = unresolvedFollow.length;
+  const noiseCount = unresolvedNoise.length;
+
+  // Today's key email = latest unresolved action email by Date Received
+  const keyEmail =
+    unresolvedAction
+      .filter((e) => !!e["Date Received"])
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(b["Date Received"] as string).getTime() -
+          new Date(a["Date Received"] as string).getTime()
+      )[0] ?? null;
+
+  const isConnected = emails.length > 0;
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10 space-y-10">
@@ -95,38 +144,57 @@ export default async function DashboardPage() {
             </h1>
 
             <p className="text-sm sm:text-base text-slate-200/90 leading-relaxed">
-              Your control surface for summaries, email intelligence, and daily signal optimisation.
+              Your control surface for summaries, email intelligence, and daily
+              signal optimisation.
             </p>
           </div>
 
-          {/* Connection Status */}
-          <div
-            className="
-              flex items-center gap-2
-              rounded-full
-              border border-white/20
-              bg-white/[0.06]
-              px-3 py-1.5
-              text-[11px] sm:text-xs
-              font-medium text-slate-200
-              backdrop-blur-xl
-            "
-          >
-            <span
-              className={`h-2 w-2 rounded-full ${
-                isConnected
-                  ? "bg-gradient-to-r from-sky-400 to-fuchsia-400 shadow-[0_0_8px_rgba(168,85,247,0.55)]"
-                  : "bg-slate-500"
-              }`}
-            />
-            <span>{isConnected ? "Connected" : "Disconnected"}</span>
+          {/* Connection + outstanding pill */}
+          <div className="flex flex-col items-end gap-2">
+            <div
+              className="
+                flex items-center gap-2
+                rounded-full
+                border border-white/20
+                bg-white/[0.06]
+                px-3 py-1.5
+                text-[11px] sm:text-xs
+                font-medium text-slate-200
+                backdrop-blur-xl
+              "
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  isConnected
+                    ? "bg-gradient-to-r from-sky-400 to-fuchsia-400 shadow-[0_0_8px_rgba(168,85,247,0.55)]"
+                    : "bg-slate-500"
+                }`}
+              />
+              <span>{isConnected ? "Connected" : "Disconnected"}</span>
+            </div>
+
+            {outstandingActionCount > 0 && (
+              <div
+                className="
+                  inline-flex items-center gap-1
+                  rounded-full
+                  border border-fuchsia-400/30
+                  bg-fuchsia-500/10
+                  px-3 py-1
+                  text-[11px]
+                  text-fuchsia-100
+                "
+              >
+                <Zap size={12} className="opacity-80" />
+                <span>{outstandingActionCount} action threads outstanding</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* Main modules */}
       <div className="grid gap-6 md:grid-cols-2">
-
         {/* SUMMARY CARD */}
         <div
           className="
@@ -135,6 +203,7 @@ export default async function DashboardPage() {
             shadow-[0_20px_70px_rgba(0,0,0,0.58)]
             hover:shadow-[0_24px_90px_rgba(0,0,0,0.7)]
             transition-all p-6 sm:p-7
+            bg-[linear-gradient(to_bottom,rgba(255,255,255,0.07),rgba(255,255,255,0.02))]
           "
         >
           <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(255,255,255,0.04)]" />
@@ -157,7 +226,8 @@ export default async function DashboardPage() {
                 </p>
               ) : (
                 <p className="text-sm text-slate-200/90">
-                  Echo will generate a calm AM/PM digest once Microsoft 365 is connected.
+                  Echo will generate a calm AM/PM digest once Microsoft 365 is
+                  connected.
                 </p>
               )}
             </div>
@@ -176,7 +246,8 @@ export default async function DashboardPage() {
               </div>
 
               <p className="pt-1 text-[11px] text-slate-400/85">
-                Echo generates summaries twice a day using your real email activity.
+                Echo generates summaries twice a day using your real email
+                activity.
               </p>
             </div>
           </div>
@@ -190,6 +261,7 @@ export default async function DashboardPage() {
             shadow-[0_20px_70px_rgba(0,0,0,0.58)]
             hover:shadow-[0_24px_90px_rgba(0,0,0,0.7)]
             transition-all p-6 sm:p-7
+            bg-[linear-gradient(to_bottom,rgba(255,255,255,0.07),rgba(255,255,255,0.02))]
           "
         >
           <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(255,255,255,0.04)]" />
@@ -204,9 +276,11 @@ export default async function DashboardPage() {
             </h2>
 
             <p className="text-sm text-slate-200/90">
-              Echo classifies messages into action, follow-up, or noise.
+              Echo classifies messages into action, follow-up, and noise — only
+              counting threads that still need attention.
             </p>
 
+            {/* Band counts (unresolved only) */}
             <div className="mt-4 grid gap-2 text-sm text-slate-200/95">
               {/* ACTION */}
               <div className="flex items-center justify-between rounded-xl px-3 py-2 border border-white/10 bg-slate-900/40 shadow-[0_-2px_12px_rgba(244,114,182,0.25)]">
@@ -214,7 +288,9 @@ export default async function DashboardPage() {
                   <Zap size={14} className="text-fuchsia-400 opacity-80" />
                   Action
                 </span>
-                <span className="text-slate-400/90 text-xs">{actionCount} threads</span>
+                <span className="text-slate-400/90 text-xs">
+                  {outstandingActionCount} threads outstanding
+                </span>
               </div>
 
               {/* FOLLOW UP */}
@@ -223,7 +299,9 @@ export default async function DashboardPage() {
                   <Mail size={14} className="text-violet-300 opacity-80" />
                   Follow-up
                 </span>
-                <span className="text-slate-400/90 text-xs">{followCount} threads</span>
+                <span className="text-slate-400/90 text-xs">
+                  {followCount} threads tracking
+                </span>
               </div>
 
               {/* NOISE */}
@@ -232,12 +310,41 @@ export default async function DashboardPage() {
                   <Bell size={14} className="text-sky-300 opacity-80" />
                   Noise
                 </span>
-                <span className="text-slate-400/90 text-xs">{noiseCount} threads</span>
+                <span className="text-slate-400/90 text-xs">
+                  {noiseCount} threads muted
+                </span>
               </div>
+            </div>
 
-              <p className="pt-1 text-[11px] text-slate-400/85">
-                Echo keeps your inbox calm by organising the signal.
+            {/* Today’s key email */}
+            <div className="mt-5 rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-xs sm:text-[13px] text-slate-200/95">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400/85 mb-1.5">
+                Today&apos;s key email
               </p>
+
+              {keyEmail ? (
+                <>
+                  <p className="font-medium line-clamp-2 text-slate-50">
+                    {keyEmail.Subject || "Untitled thread"}
+                  </p>
+                  <p className="mt-0.5 text-slate-400/90 line-clamp-1">
+                    {keyEmail.From}
+                  </p>
+                  {keyEmail.Summary && (
+                    <p className="mt-1 text-slate-300/90 line-clamp-2">
+                      {keyEmail.Summary}
+                    </p>
+                  )}
+                  <p className="mt-2 text-[10px] text-slate-500/90">
+                    Pulled from your Action band · unresolved only.
+                  </p>
+                </>
+              ) : (
+                <p className="text-slate-400/90">
+                  Once Echo has outstanding action threads, your highest-signal
+                  one will appear here.
+                </p>
+              )}
             </div>
           </div>
         </div>
