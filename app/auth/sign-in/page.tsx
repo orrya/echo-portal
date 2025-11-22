@@ -1,22 +1,12 @@
+// app/auth/sign-in/page.tsx
 "use client";
-
-import { supabaseClient } from "@/lib/supabaseClient";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL!;
 
 export default function SignInPage() {
-  const handleSignIn = async () => {
-    await supabaseClient.auth.signInWithOAuth({
-      provider: "azure",
-      options: {
-        // ⭐ Required scopes for Microsoft 365 email + profile
-        scopes:
-          "openid email offline_access profile User.Read Mail.ReadWrite",
-
-        // ⭐ Your official redirect handler
-        redirectTo: `${SITE_URL}/auth/callback`,
-      },
-    });
+  const handleSignIn = () => {
+    // ✅ Our own redirect handler, NOT Supabase OAuth
+    window.location.href = `${SITE_URL}/auth/redirect`;
   };
 
   return (

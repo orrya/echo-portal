@@ -8,6 +8,9 @@ export default function SettingsForm() {
   const [loading, setLoading] = useState(false);
   const [autoReply, setAutoReply] = useState(false);
 
+  const SITE_URL =
+    process.env.NEXT_PUBLIC_SITE_URL || "https://echo.orrya.co.uk";
+
   useEffect(() => {
     const fetchProfile = async () => {
       const {
@@ -52,9 +55,9 @@ export default function SettingsForm() {
     setLoading(false);
   };
 
-  // FIXED: manual redirect instead of Supabase OAuth
-  const connectMicrosoft = async () => {
-    window.location.href = `${process.env.NEXT_PUBLIC_SITE_URL}/auth/redirect`;
+  // Manual Microsoft OAuth redirect
+  const connectMicrosoft = () => {
+    window.location.href = `${SITE_URL}/auth/redirect`;
   };
 
   return (

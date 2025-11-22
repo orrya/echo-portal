@@ -1,3 +1,4 @@
+// app/auth/callback/route.ts
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
@@ -9,35 +10,26 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const siteUrl = CANONICAL_URL;
   const url = new URL(req.url);
-
-  // ───────────────────────────────────────────────────────────────
-  // 1. Ensure we received ?code= from Azure
-  // ───────────────────────────────────────────────────────────────
   const authCode = url.searchParams.get("code");
 
   if (!authCode) {
-    console.error("Missing Microsoft auth code");
+    console.error("Missing `code` in Azure redirect");
     return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=missing_code`);
   }
 
-  // ───────────────────────────────────────────────────────────────
-  // 2. Load Azure credentials
-  // ───────────────────────────────────────────────────────────────
   const tenantId = process.env.AZURE_TENANT_ID || "common";
   const clientId =
     process.env.AZURE_CLIENT_ID || process.env.NEXT_PUBLIC_AZURE_CLIENT_ID;
   const clientSecret = process.env.AZURE_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    console.error("Azure credentials missing");
+    console.error("Azure env vars missing");
     return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=azure_config`);
   }
 
   const redirectUri = `${siteUrl}/auth/callback`;
 
-  // ───────────────────────────────────────────────────────────────
-  // 3. Exchange authorization code for tokens
-  // ───────────────────────────────────────────────────────────────
+  // 1) Exchange code for tokens
   const tokenRes = await fetch(
     `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
     {
@@ -60,32 +52,27 @@ export async function GET(req: Request) {
     return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=token_exchange`);
   }
 
-  const accessToken = tokenData.access_token;
-  const refreshToken = tokenData.refresh_token ?? null;
-  const expiresIn = tokenData.expires_in ?? 3600;
+  const accessToken: string = tokenData.access_token;
+  const refreshToken: string | undefined = tokenData.refresh_token;
+  const expiresIn: number = tokenData.expires_in ?? 3600;
 
-  // ───────────────────────────────────────────────────────────────
-  // 4. Fetch Microsoft Graph profile
-  // ───────────────────────────────────────────────────────────────
+  // 2) Fetch Microsoft profile
   const profileRes = await fetch("https://graph.microsoft.com/v1.0/me", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-
   const profile = await profileRes.json();
 
-  const email =
+  const email: string | undefined =
     profile.mail ||
     profile.userPrincipalName ||
-    (Array.isArray(profile.otherMails) ? profile.otherMails[0] : null);
+    (Array.isArray(profile.otherMails) ? profile.otherMails[0] : undefined);
 
   if (!email) {
-    console.error("Azure profile did not return an email:", profile);
+    console.error("No usable email in Microsoft profile:", profile);
     return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=no_email`);
   }
 
-  // ───────────────────────────────────────────────────────────────
-  // 5. Supabase Admin Client
-  // ───────────────────────────────────────────────────────────────
+  // 3) Supabase admin client
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
@@ -93,15 +80,13 @@ export async function GET(req: Request) {
     auth: { persistSession: false },
   });
 
-  // ───────────────────────────────────────────────────────────────
-  // 6. Find or create user in Supabase
-  // ───────────────────────────────────────────────────────────────
+  // 4) Find or create user
   const { data: listData } = await admin.auth.admin.listUsers();
   let user =
-    listData?.users.find((u) => u.email?.toLowerCase() === email.toLowerCase()) ??
-    null;
+    listData?.users.find(
+      (u) => u.email?.toLowerCase() === email.toLowerCase()
+    ) ?? null;
 
-  // Create user if not exists
   if (!user) {
     const { data, error } = await admin.auth.admin.createUser({
       email,
@@ -109,17 +94,15 @@ export async function GET(req: Request) {
     });
 
     if (error || !data?.user) {
-      console.error("Supabase user creation failed:", error);
+      console.error("Failed creating Supabase user:", error);
       return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=create_user`);
     }
 
     user = data.user;
   }
 
-  // ───────────────────────────────────────────────────────────────
-  // 7. Store tokens + display name
-  // ───────────────────────────────────────────────────────────────
-  const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
+  // 5) Store tokens + profile in your own tables
+  const expiresAtIso = new Date(Date.now() + expiresIn * 1000).toISOString();
 
   await admin.from("profiles").upsert({
     id: user.id,
@@ -128,15 +111,13 @@ export async function GET(req: Request) {
 
   await admin.from("user_connections").upsert({
     user_id: user.id,
-    provider: "microsoft",
+    provider: "azure", // <- consistent provider name
     access_token: accessToken,
-    refresh_token: refreshToken,
-    expires_at: expiresAt,
+    refresh_token: refreshToken ?? null,
+    expires_at: expiresAtIso,
   });
 
-  // ───────────────────────────────────────────────────────────────
-  // 8. Create a Supabase session for this user
-  // ───────────────────────────────────────────────────────────────
+  // 6) Create a Supabase session for this user
   const adminAuth: any = (admin as any).auth.admin;
   const { data: sessionData, error: sessionErr } =
     await adminAuth.createSessionForUser({
@@ -144,29 +125,25 @@ export async function GET(req: Request) {
     });
 
   if (sessionErr || !sessionData?.session) {
-    console.error("Supabase session creation failed:", sessionErr);
+    console.error("createSessionForUser error:", sessionErr);
     return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=session_err`);
   }
 
   const session = sessionData.session;
 
-  // ───────────────────────────────────────────────────────────────
-  // 9. Write Supabase cookies
-  // ───────────────────────────────────────────────────────────────
+  // 7) Write Supabase auth cookies
+  const res = NextResponse.redirect(`${siteUrl}/dashboard`);
   const routeClient = createRouteHandlerClient({ cookies });
 
-  const { error: cookieErr } = await routeClient.auth.setSession({
+  const { error: writeError } = await routeClient.auth.setSession({
     access_token: session.access_token,
     refresh_token: session.refresh_token,
   });
 
-  if (cookieErr) {
-    console.error("Cookie write failed:", cookieErr);
+  if (writeError) {
+    console.error("setSession error:", writeError);
     return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=cookie_write`);
   }
 
-  // ───────────────────────────────────────────────────────────────
-  // 10. Redirect user to dashboard
-  // ───────────────────────────────────────────────────────────────
-  return NextResponse.redirect(`${siteUrl}/dashboard`);
+  return res;
 }
