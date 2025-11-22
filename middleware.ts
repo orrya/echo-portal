@@ -1,7 +1,6 @@
 // middleware.ts
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
 import { CANONICAL_URL } from "@/lib/constants";
 
 const CANONICAL_HOST = new URL(CANONICAL_URL).host;
@@ -10,12 +9,12 @@ export async function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
   const host = req.headers.get("host");
 
-  // 1) Let the callback route run without session lookups
+  // Allow callback without rewriting
   if (path.startsWith("/auth/callback")) {
     return NextResponse.next();
   }
 
-  // 2) Enforce canonical domain (production only)
+  // Canonical domain enforcement
   if (
     process.env.NODE_ENV === "production" &&
     host &&
@@ -28,12 +27,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // 3) Normal Supabase session refresh
-  const res = NextResponse.next();
-  const supabase = createMiddlewareClient({ req, res });
-  await supabase.auth.getSession();
-
-  return res;
+  return NextResponse.next();
 }
 
 export const config = {

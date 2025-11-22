@@ -1,25 +1,23 @@
 // lib/getUser.ts
 import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
 
 export async function getUser() {
-  const cookieStore = cookies();
+  try {
+    const cookieStore = cookies();
+    const raw = cookieStore.get("echo-auth");
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-      },
-    }
-  );
+    if (!raw) return null;
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    const parsed = JSON.parse(raw.value);
 
-  return user ?? null;
+    if (!parsed?.user_id) return null;
+
+    return {
+      id: parsed.user_id,
+      email: parsed.email ?? null,
+    };
+  } catch (err) {
+    console.error("getUser parse error:", err);
+    return null;
+  }
 }
