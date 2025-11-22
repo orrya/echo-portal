@@ -7,6 +7,4 @@
 const raw = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
 // Normalize (no trailing slash)
-export const CANONICAL_URL = raw.endsWith("/")
-  ? raw.slice(0, -1)
-  : raw;
+export const CANONICAL_URL = raw.endsWith("/") ? raw.slice(0, -1) : raw;

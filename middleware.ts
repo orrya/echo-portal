@@ -7,12 +7,15 @@ import { CANONICAL_URL } from "@/lib/constants";
 const CANONICAL_HOST = new URL(CANONICAL_URL).host;
 
 export async function middleware(req: NextRequest) {
-  const res = NextResponse.next();
-
-  const host = req.headers.get("host");
   const path = req.nextUrl.pathname;
+  const host = req.headers.get("host");
 
-  // Enforce canonical domain (production only)
+  // 1) Let the callback route run without session lookups
+  if (path.startsWith("/auth/callback")) {
+    return NextResponse.next();
+  }
+
+  // 2) Enforce canonical domain (production only)
   if (
     process.env.NODE_ENV === "production" &&
     host &&
@@ -25,7 +28,8 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Refresh Supabase session cookies
+  // 3) Normal Supabase session refresh
+  const res = NextResponse.next();
   const supabase = createMiddlewareClient({ req, res });
   await supabase.auth.getSession();
 

@@ -22,6 +22,6 @@ export async function GET() {
   });
 
   return NextResponse.redirect(
-    `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize?${params}`
+    `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize?${params.toString()}`
   );
 }

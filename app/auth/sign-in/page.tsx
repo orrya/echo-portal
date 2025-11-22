@@ -3,7 +3,7 @@
 
 import { supabaseClient } from "@/lib/supabaseClient";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL!;  // safe because it exists
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL!; // already set in Vercel
 
 export default function SignInPage() {
   const handleSignIn = async () => {
@@ -11,7 +11,7 @@ export default function SignInPage() {
       provider: "azure",
       options: {
         scopes: "openid email offline_access profile User.Read",
-        redirectTo: `${SITE_URL}/auth/callback`,   // IMPORTANT
+        redirectTo: `${SITE_URL}/auth/callback`, // IMPORTANT
       },
     });
   };
