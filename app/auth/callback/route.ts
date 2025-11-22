@@ -1,34 +1,39 @@
 // app/auth/callback/route.ts
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
-import { CANONICAL_URL } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  const siteUrl = CANONICAL_URL || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
   try {
     const url = new URL(req.url);
     const authCode = url.searchParams.get("code");
 
     if (!authCode) {
-      return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=missing_code`);
+      console.error("Missing ?code in callback URL");
+      return NextResponse.redirect(
+        `${siteUrl}/auth/sign-in?error=missing_code`
+      );
     }
 
-    const tenantId = process.env.AZURE_TENANT_ID ?? "common";
-    const clientId = process.env.AZURE_CLIENT_ID;
+    const tenantId = process.env.AZURE_TENANT_ID || "common";
+    const clientId =
+      process.env.AZURE_CLIENT_ID || process.env.NEXT_PUBLIC_AZURE_CLIENT_ID;
     const clientSecret = process.env.AZURE_CLIENT_SECRET;
 
     if (!clientId || !clientSecret) {
       console.error("Azure env vars missing");
-      return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=azure_config`);
+      return NextResponse.redirect(
+        `${siteUrl}/auth/sign-in?error=azure_config`
+      );
     }
 
     const redirectUri = `${siteUrl}/auth/callback`;
 
-    // 1. Exchange Microsoft code for tokens
+    // 1) Exchange Microsoft code for tokens
     const tokenRes = await fetch(
       `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
       {
@@ -48,14 +53,16 @@ export async function GET(req: Request) {
 
     if (!tokenRes.ok) {
       console.error("Azure token error:", tokenData);
-      return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=token_exchange`);
+      return NextResponse.redirect(
+        `${siteUrl}/auth/sign-in?error=token_exchange`
+      );
     }
 
     const accessToken: string = tokenData.access_token;
     const refreshToken: string | undefined = tokenData.refresh_token;
     const expiresIn: number = tokenData.expires_in ?? 3600;
 
-    // 2. Fetch Microsoft profile
+    // 2) Fetch Microsoft profile
     const profileRes = await fetch("https://graph.microsoft.com/v1.0/me", {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
@@ -69,24 +76,30 @@ export async function GET(req: Request) {
 
     if (!email) {
       console.error("No email in Microsoft profile:", profile);
-      return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=no_email`);
+      return NextResponse.redirect(
+        `${siteUrl}/auth/sign-in?error=no_email`
+      );
     }
 
-    // 3. Supabase admin client
+    // 3) Supabase admin client
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceKey) {
       console.error("Supabase env vars missing");
-      return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=supabase_config`);
+      return NextResponse.redirect(
+        `${siteUrl}/auth/sign-in?error=supabase_config`
+      );
     }
 
     const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false },
     });
 
-    // 4. Find or create auth user
-    const { data: listData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+    // 4) Find or create auth user
+    const { data: listData, error: listError } =
+      await supabaseAdmin.auth.admin.listUsers();
+
     if (listError) {
       console.error("listUsers error:", listError);
     }
@@ -105,14 +118,18 @@ export async function GET(req: Request) {
 
       if (createError || !created?.user) {
         console.error("createUser error:", createError);
-        return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=create_user`);
+        return NextResponse.redirect(
+          `${siteUrl}/auth/sign-in?error=create_user`
+        );
       }
 
       user = created.user;
     }
 
-    // 5. Store profile + tokens
-    const expiresAtIso = new Date(Date.now() + expiresIn * 1000).toISOString();
+    // 5) Store profile + tokens
+    const expiresAtIso = new Date(
+      Date.now() + expiresIn * 1000
+    ).toISOString();
 
     await supabaseAdmin.from("profiles").upsert({
       id: user.id,
@@ -127,21 +144,23 @@ export async function GET(req: Request) {
       expires_at: expiresAtIso,
     });
 
-    // 6. Create Supabase session for this user (admin “log in as user”)
-    // NOTE: createSession is relatively new; we cast to any so TS won’t complain
+    // 6) Create Supabase session for this user
     const adminAuth: any = (supabaseAdmin as any).auth.admin;
     const { data: sessionData, error: sessionError } =
       await adminAuth.createSession(user.id);
 
     if (sessionError || !sessionData?.session) {
       console.error("createSession error:", sessionError);
-      return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=create_session`);
+      return NextResponse.redirect(
+        `${siteUrl}/auth/sign-in?error=create_session`
+      );
     }
 
     const session = sessionData.session;
 
-    // 7. Set Supabase auth cookies
-    const cookieStore = cookies();
+    // 7) Set Supabase auth cookies on the RESPONSE (not via cookies())
+    const res = NextResponse.redirect(`${siteUrl}/dashboard`);
+
     const cookieOptions = {
       httpOnly: true,
       secure: true,
@@ -149,13 +168,15 @@ export async function GET(req: Request) {
       path: "/",
     };
 
-    cookieStore.set("sb-access-token", session.access_token, cookieOptions);
-    cookieStore.set("sb-refresh-token", session.refresh_token, cookieOptions);
+    res.cookies.set("sb-access-token", session.access_token, cookieOptions);
+    res.cookies.set("sb-refresh-token", session.refresh_token, cookieOptions);
 
-    // 8. Redirect into the app
-    return NextResponse.redirect(`${siteUrl}/dashboard`);
+    // 8) Done – user is now logged in
+    return res;
   } catch (err) {
     console.error("Callback fatal error:", err);
-    return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=callback_exception`);
+    return NextResponse.redirect(
+      `${siteUrl}/auth/sign-in?error=callback_exception`
+    );
   }
 }
