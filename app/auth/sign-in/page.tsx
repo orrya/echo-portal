@@ -1,18 +1,11 @@
-// app/auth/sign-in/page.tsx
 "use client";
 
-import { supabaseClient } from "@/lib/supabaseClient";
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL!; // already set in Vercel
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL!;
 
 export default function SignInPage() {
-  const handleSignIn = async () => {
-    await supabaseClient.auth.signInWithOAuth({
-      provider: "azure",
-      options: {
-        redirectTo: `${SITE_URL}/auth/callback`, // IMPORTANT
-      },
-    });
+  const handleSignIn = () => {
+    // Redirect directly to your custom redirect route
+    window.location.href = `${SITE_URL}/auth/redirect`;
   };
 
   return (

@@ -1,4 +1,3 @@
-// components/SettingsForm.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -9,7 +8,6 @@ export default function SettingsForm() {
   const [loading, setLoading] = useState(false);
   const [autoReply, setAutoReply] = useState(false);
 
-  /** Load user profile */
   useEffect(() => {
     const fetchProfile = async () => {
       const {
@@ -33,7 +31,6 @@ export default function SettingsForm() {
     fetchProfile();
   }, []);
 
-  /** Save settings */
   const saveSettings = async () => {
     setLoading(true);
 
@@ -55,14 +52,9 @@ export default function SettingsForm() {
     setLoading(false);
   };
 
-  /** Microsoft OAuth – same as Sign-in page */
+  // FIXED: manual redirect instead of Supabase OAuth
   const connectMicrosoft = async () => {
-    await supabaseClient.auth.signInWithOAuth({
-      provider: "azure",
-      options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/settings`,
-      },
-    });
+    window.location.href = `${process.env.NEXT_PUBLIC_SITE_URL}/auth/redirect`;
   };
 
   return (
