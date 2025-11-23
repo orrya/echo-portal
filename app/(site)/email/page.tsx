@@ -1,8 +1,9 @@
+// app/(site)/email/page.tsx
 import { getUser } from "@/lib/getUser";
 import { createClient } from "@supabase/supabase-js";
 import EmailClientShell from "./EmailClientShell";
 
-// Shared band helper (same logic as dashboard)
+// Shared band helper – same logic as dashboard
 function getBandForCategory(category: string | null) {
   const c = (category ?? "").toLowerCase().trim();
 
@@ -49,25 +50,22 @@ export default async function EmailPage() {
 
   const all = emails ?? [];
 
-  // Helper: resolved vs unresolved
-  const isResolved = (status: string | null | undefined) =>
-    status?.toLowerCase() === "resolved";
-
+  // Unresolved for headline counts (match dashboard semantics)
   const unresolved = all.filter(
-    (e) => !isResolved(e["Email Status"])
+    (e) =>
+      !e["Email Status"] ||
+      e["Email Status"]?.toLowerCase() !== "resolved"
   );
 
-  const actionCount = unresolved.filter(
+  const actionUnresolved = unresolved.filter(
     (e) => getBandForCategory(e.Category) === "action"
-  ).length;
-
-  const followUpCount = unresolved.filter(
+  );
+  const followUpUnresolved = unresolved.filter(
     (e) => getBandForCategory(e.Category) === "follow_up"
-  ).length;
-
-  const noiseCount = unresolved.filter(
+  );
+  const noiseUnresolved = unresolved.filter(
     (e) => getBandForCategory(e.Category) === "noise"
-  ).length;
+  );
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-20 space-y-12">
@@ -98,17 +96,18 @@ export default async function EmailPage() {
 
         <p className="max-w-2xl text-slate-200/90 sm:text-base leading-relaxed">
           Echo will sit above your Microsoft 365 inbox and quietly organise
-          everything into clear priority bands.
+          everything into clear priority bands. Below is a live view of how
+          your email signal is being grouped.
         </p>
 
         <p className="text-xs text-slate-400/90 pt-1">
           {all.length === 0
             ? "No email records have been synced to Echo yet."
-            : `${all.length} messages processed · ${actionCount} action · ${followUpCount} follow-up · ${noiseCount} noise`}
+            : `${all.length} messages processed · ${actionUnresolved.length} action · ${followUpUnresolved.length} follow-up · ${noiseUnresolved.length} noise`}
         </p>
       </div>
 
-      {/* Bands + Drawer UI */}
+      {/* Shell gets the full list; it handles bands, focus mode, etc. */}
       <EmailClientShell emails={all} />
     </div>
   );

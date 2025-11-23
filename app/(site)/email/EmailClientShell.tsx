@@ -1,6 +1,7 @@
+// app/(site)/email/EmailClientShell.tsx
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 type EmailRecord = {
@@ -31,62 +32,116 @@ interface DraftPreview {
   webLink: string | null;
 }
 
-// Shared band helper (same as page/dashboard)
-function getBandForCategory(category: string | null): BandKey {
-  const c = (category ?? "").toLowerCase().trim();
-
-  if (c.includes("follow")) return "follow_up";
-  if (
-    c.includes("info") ||
-    c.includes("promo") ||
-    c.includes("newsletter") ||
-    c === "informational"
-  ) {
-    return "noise";
-  }
-
-  return "action";
-}
-
-function isResolved(status: string | null | undefined) {
-  return status?.toLowerCase() === "resolved";
-}
-
 export default function EmailClientShell({ emails }: Props) {
-  const [emailsState, setEmailsState] = useState<EmailRecord[]>(emails);
   const [selectedBand, setSelectedBand] = useState<BandKey | null>(null);
   const [loadingEmailId, setLoadingEmailId] = useState<string | null>(null);
   const [draftPreview, setDraftPreview] = useState<DraftPreview | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [focusMode, setFocusMode] = useState(false);
 
-  // Band -> emails (all, including resolved)
+  // Local mutable copy so we can update "resolved" without reloading
+  const [localEmails, setLocalEmails] = useState<EmailRecord[]>(emails);
+
+  // Focus mode state
+  const [focusMode, setFocusMode] = useState(false);
+  const [focusDurationMinutes, setFocusDurationMinutes] = useState<number | null>(null);
+  const [focusEndAt, setFocusEndAt] = useState<number | null>(null);
+  const [focusBaselineCount, setFocusBaselineCount] = useState<number | null>(null);
+  const [now, setNow] = useState<number>(Date.now());
+
+  // Keep localEmails synced if props change
+  useEffect(() => {
+    setLocalEmails(emails);
+  }, [emails]);
+
+  // Helper: band from category
+  function getBand(category: string | null): BandKey {
+    const c = (category ?? "").toLowerCase().trim();
+    if (c.includes("follow")) return "follow_up";
+    if (
+      c.includes("info") ||
+      c.includes("promo") ||
+      c.includes("newsletter") ||
+      c === "informational"
+    )
+      return "noise";
+    return "action";
+  }
+
+  const isUnresolved = (e: EmailRecord) =>
+    !e["Email Status"] || e["Email Status"]?.toLowerCase() !== "resolved";
+
+  // ---- Band groupings (from localEmails) ----
+  const {
+    actionAll,
+    followUpAll,
+    noiseAll,
+    actionUnresolved,
+    followUpUnresolved,
+    noiseUnresolved,
+  } = useMemo(() => {
+    const actionAll = localEmails.filter((e) => getBand(e.Category) === "action");
+    const followUpAll = localEmails.filter((e) => getBand(e.Category) === "follow_up");
+    const noiseAll = localEmails.filter((e) => getBand(e.Category) === "noise");
+
+    const actionUnresolved = actionAll.filter(isUnresolved);
+    const followUpUnresolved = followUpAll.filter(isUnresolved);
+    const noiseUnresolved = noiseAll.filter(isUnresolved);
+
+    return {
+      actionAll,
+      followUpAll,
+      noiseAll,
+      actionUnresolved,
+      followUpUnresolved,
+      noiseUnresolved,
+    };
+  }, [localEmails]);
+
   const bandMap: Record<BandKey, EmailRecord[]> = {
-    action: emailsState.filter(
-      (e) => getBandForCategory(e.Category) === "action"
-    ),
-    follow_up: emailsState.filter(
-      (e) => getBandForCategory(e.Category) === "follow_up"
-    ),
-    noise: emailsState.filter(
-      (e) => getBandForCategory(e.Category) === "noise"
-    ),
+    action: actionAll,
+    follow_up: followUpAll,
+    noise: noiseAll,
   };
 
-  const unresolvedForBand = (band: BandKey) =>
-    bandMap[band].filter((e) => !isResolved(e["Email Status"]));
-
-  const currentBase =
+  const currentEmails =
     selectedBand === null ? [] : bandMap[selectedBand] ?? [];
 
-  // In focus mode, drawer only shows unresolved Action emails
-  const currentEmails =
-    focusMode && selectedBand === "action"
-      ? unresolvedForBand("action")
-      : currentBase;
+  // ---- Focus mode timer tick ----
+  useEffect(() => {
+    if (!focusMode || !focusEndAt) return;
 
-  // --- Band label helper ---
+    const id = window.setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(id);
+  }, [focusMode, focusEndAt]);
+
+  const remainingMs =
+    focusMode && focusEndAt ? Math.max(0, focusEndAt - now) : 0;
+
+  const remainingMinutes = Math.floor(remainingMs / 60000);
+  const remainingSeconds = Math.floor((remainingMs % 60000) / 1000);
+
+  const focusTimeLabel =
+    focusMode && focusEndAt
+      ? `${String(remainingMinutes).padStart(2, "0")}:${String(
+          remainingSeconds
+        ).padStart(2, "0")}`
+      : null;
+
+  // Progress in focus session (based on unresolved action at start vs now)
+  const currentUnresolvedActionCount = actionUnresolved.length;
+  const baseline = focusBaselineCount ?? currentUnresolvedActionCount;
+  const resolvedThisSession =
+    baseline > currentUnresolvedActionCount
+      ? baseline - currentUnresolvedActionCount
+      : 0;
+  const totalForProgress = baseline || 1;
+  const focusProgress =
+    resolvedThisSession > 0 ? resolvedThisSession / totalForProgress : 0;
+
+  // ---- Band label helper ----
   const bandLabel = (band: BandKey | null) => {
     if (band === "action") return "Action";
     if (band === "follow_up") return "Follow-up";
@@ -94,7 +149,40 @@ export default function EmailClientShell({ emails }: Props) {
     return "";
   };
 
-  // --- RESOLVE EMAIL (no reload, local state update) ---
+  const handleSelectBand = (band: BandKey) => {
+    // In focus mode, only allow Action band
+    if (focusMode && band !== "action") return;
+    setSelectedBand((prev) => (prev === band ? null : band));
+    setDraftError(null);
+  };
+
+  // ---- Focus session controls ----
+  const startFocusSession = (minutes: number) => {
+    if (minutes <= 0) return;
+
+    setFocusDurationMinutes(minutes);
+    setFocusEndAt(Date.now() + minutes * 60_000);
+    setFocusBaselineCount(currentUnresolvedActionCount);
+    setFocusMode(true);
+    setSelectedBand("action");
+  };
+
+  const stopFocusSession = () => {
+    setFocusMode(false);
+    setFocusEndAt(null);
+    setFocusDurationMinutes(null);
+    setFocusBaselineCount(null);
+  };
+
+  const handleCustomDuration = () => {
+    const value = window.prompt("Focus minutes (e.g. 30):", "30");
+    if (!value) return;
+    const minutes = parseInt(value, 10);
+    if (Number.isNaN(minutes) || minutes <= 0) return;
+    startFocusSession(minutes);
+  };
+
+  // ---- Mark email as resolved (no reload) ----
   const resolveEmail = async (emailId: string) => {
     setLoadingEmailId(emailId);
 
@@ -107,14 +195,13 @@ export default function EmailClientShell({ emails }: Props) {
 
       if (!res.ok) throw new Error(await res.text());
 
-      // Update local state so UI reflects resolution without reload
-      setEmailsState((prev) =>
+      // Optimistically update local state so UI reflects "Resolved"
+      setLocalEmails((prev) =>
         prev.map((e) =>
           e.id === emailId
             ? {
                 ...e,
-                "Email Status": "resolved",
-                // Optional: stamp local finish time for UI only
+                "Email Status": "Resolved",
                 "Finish Time": e["Finish Time"] ?? new Date().toISOString(),
               }
             : e
@@ -127,12 +214,11 @@ export default function EmailClientShell({ emails }: Props) {
     }
   };
 
-  // --- GENERATE REPLY (your n8n-backed API) ---
+  // ---- Generate reply (calls your n8n-backed /api/generate-reply) ----
   const handleGenerateDraft = async (emailId: string) => {
     try {
       setLoadingEmailId(emailId);
       setDraftError(null);
-      setCopied(false);
 
       const res = await fetch("/api/generate-reply", {
         method: "POST",
@@ -145,8 +231,36 @@ export default function EmailClientShell({ emails }: Props) {
         throw new Error(text || "Failed to generate reply draft.");
       }
 
-      const data = (await res.json()) as DraftPreview;
-      setDraftPreview(data);
+      const raw = await res.json();
+
+      // Handle either a single object or an array like your Graph output
+      const payload = Array.isArray(raw) ? raw[0] ?? {} : raw ?? {};
+
+      const subject =
+        payload.subject ??
+        payload.Subject ??
+        "Draft reply";
+      const bodyPreview =
+        payload.bodyPreview ??
+        payload.preview ??
+        null;
+      const htmlBody =
+        payload.htmlBody ??
+        payload.body?.content ??
+        null;
+      const webLink =
+        payload.webLink ??
+        payload.WebLink ??
+        null;
+
+      const draft: DraftPreview = {
+        subject,
+        bodyPreview,
+        htmlBody,
+        webLink,
+      };
+
+      setDraftPreview(draft);
     } catch (err: any) {
       console.error(err);
       setDraftError(
@@ -157,78 +271,141 @@ export default function EmailClientShell({ emails }: Props) {
     }
   };
 
-  // --- COPY DRAFT TEXT ---
   const handleCopyDraft = async () => {
     if (!draftPreview) return;
 
-    // Prefer bodyPreview; fallback to htmlBody stripped
-    let text = draftPreview.bodyPreview ?? "";
+    const html = draftPreview.htmlBody ?? "";
+    const plainFromHtml =
+      html && html.length > 0
+        ? html.replace(/<[^>]+>/g, " ")
+        : null;
 
-    if (!text && draftPreview.htmlBody) {
-      text = draftPreview.htmlBody.replace(/<[^>]+>/g, " ");
-    }
+    const textToCopy =
+      draftPreview.bodyPreview ??
+      (plainFromHtml && plainFromHtml.trim().length > 0
+        ? plainFromHtml
+        : draftPreview.webLink ?? "");
 
-    if (!text) return;
+    if (!textToCopy) return;
 
     try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      await navigator.clipboard.writeText(textToCopy);
+      // Lightweight feedback; you can swap for a toast if you like
+      alert("Draft copied to clipboard");
     } catch (e) {
       console.error("Clipboard error:", e);
     }
   };
 
-  const handleSelectBand = (band: BandKey) => {
-    setSelectedBand((prev) => (prev === band ? null : band));
-    setDraftError(null);
-  };
-
-  const toggleFocusMode = () => {
-    setFocusMode((prev) => {
-      const next = !prev;
-      if (next && selectedBand !== "action") {
-        setSelectedBand("action");
-      }
-      return next;
-    });
-  };
-
-  // --- Render ---
+  // ---- Render ----
   return (
     <div className="space-y-8">
-      {/* Focus mode control */}
-      <div className="flex items-center justify-between gap-4">
-        <p className="text-xs text-slate-400/85">
-          {focusMode
-            ? "Focus mode · working through unresolved Action threads."
-            : "Tap a band to explore, or enable focus mode to work through Action threads."}
-        </p>
-        <button
-          type="button"
-          onClick={toggleFocusMode}
-          className={`
-            inline-flex items-center gap-1 rounded-full px-3 py-1.5
-            text-[11px] font-medium
-            border border-white/15
-            backdrop-blur-xl
-            transition
-            ${
-              focusMode
-                ? "bg-sky-500/90 text-slate-950 shadow-[0_0_18px_rgba(56,189,248,0.7)]"
-                : "bg-white/5 text-slate-200 hover:bg-white/10"
-            }
-          `}
-        >
-          <span
+      {/* Focus mode strip */}
+      <div
+        className="
+          flex flex-wrap items-center justify-between gap-3
+          rounded-2xl border border-white/10 bg-slate-900/60
+          px-4 py-3 sm:px-5 sm:py-3.5
+          backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.7)]
+        "
+      >
+        <div className="space-y-1">
+          <p className="text-[11px] tracking-[0.22em] text-slate-300/80 font-semibold uppercase">
+            Echo focus mode
+          </p>
+          {focusMode && focusTimeLabel ? (
+            <p className="text-xs text-slate-200/90">
+              In flow · {focusTimeLabel} remaining ·{" "}
+              <span className="text-sky-300">
+                {currentUnresolvedActionCount}{" "}
+                {currentUnresolvedActionCount === 1
+                  ? "action email left"
+                  : "action emails left"}
+              </span>
+              {resolvedThisSession > 0 && (
+                <> · {resolvedThisSession} resolved this session</>
+              )}
+            </p>
+          ) : (
+            <p className="text-xs text-slate-400/90">
+              Start a focused block on your{" "}
+              <span className="text-sky-300">Action</span> emails only.
+              Echo will quietly grey out everything else.
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {!focusMode && (
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-200/90">
+              <button
+                type="button"
+                onClick={() => startFocusSession(25)}
+                className="rounded-full border border-slate-600/80 px-3 py-1 hover:border-sky-400/90 transition"
+              >
+                25 min
+              </button>
+              <button
+                type="button"
+                onClick={() => startFocusSession(45)}
+                className="rounded-full border border-slate-600/80 px-3 py-1 hover:border-sky-400/90 transition"
+              >
+                45 min
+              </button>
+              <button
+                type="button"
+                onClick={handleCustomDuration}
+                className="rounded-full border border-slate-600/80 px-3 py-1 hover:border-sky-400/90 transition"
+              >
+                Custom
+              </button>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              if (focusMode) {
+                stopFocusSession();
+              } else {
+                // Default: 25 min auto-start
+                startFocusSession(25);
+              }
+            }}
             className={`
-              h-1.5 w-1.5 rounded-full
-              ${focusMode ? "bg-slate-900" : "bg-slate-400"}
+              rounded-full text-xs px-3.5 py-1.5 font-semibold
+              shadow-[0_14px_36px_rgba(56,189,248,0.55)]
+              ${
+                focusMode
+                  ? "bg-slate-800 text-slate-200 border border-slate-500/80 hover:border-rose-400/80"
+                  : "bg-sky-500/90 text-slate-950 hover:bg-sky-400"
+              }
             `}
-          />
-          {focusMode ? "Focus mode on" : "Focus mode off"}
-        </button>
+          >
+            {focusMode ? "Exit focus" : "Start 25-min focus"}
+          </button>
+        </div>
       </div>
+
+      {/* When focus mode is active, show a soft progress bar */}
+      {focusMode && (
+        <div className="w-full rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3">
+          <div className="flex items-center justify-between text-[11px] text-slate-300/85 mb-1.5">
+            <span>Session progress</span>
+            <span>
+              {resolvedThisSession}/{baseline} resolved
+            </span>
+          </div>
+          <div className="h-1.5 rounded-full bg-slate-800/90 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-sky-400 via-fuchsia-400 to-emerald-400 transition-all duration-500"
+              style={{
+                width: `${Math.min(100, Math.round(focusProgress * 100))}%`,
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Category cards */}
       <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
@@ -255,7 +432,7 @@ export default function EmailClientShell({ emails }: Props) {
                 </p>
                 <p className="text-xs text-slate-400/90 mt-1">
                   {focusMode && selectedBand === "action"
-                    ? "Focus mode is showing only unresolved Action threads."
+                    ? "Echo is keeping you in a tight action lane. Work your way down; everything else can wait."
                     : "Echo is surfacing the most relevant threads in this band. Tap a card to act."}
                 </p>
               </div>
@@ -274,17 +451,16 @@ export default function EmailClientShell({ emails }: Props) {
                 {currentEmails.map((email) => {
                   const isLoading = loadingEmailId === email.id;
                   const category = (email.Category ?? "").toLowerCase();
-                  const resolved = isResolved(email["Email Status"]);
+                  const resolved =
+                    email["Email Status"]?.toLowerCase() === "resolved";
 
                   let gradientClass =
                     "from-fuchsia-400 via-pink-400 to-sky-400";
                   if (selectedBand === "follow_up") {
-                    gradientClass =
-                      "from-violet-400 via-indigo-400 to-sky-400";
+                    gradientClass = "from-violet-400 via-indigo-400 to-sky-400";
                   }
                   if (selectedBand === "noise") {
-                    gradientClass =
-                      "from-slate-500 via-slate-600 to-sky-500";
+                    gradientClass = "from-slate-500 via-slate-600 to-sky-500";
                   }
 
                   const finishDate =
@@ -398,7 +574,7 @@ export default function EmailClientShell({ emails }: Props) {
                                 : "Generate reply"}
                             </button>
 
-                            {/* View thread – placeholder */}
+                            {/* View thread – future Outlook web link */}
                             <button
                               type="button"
                               className="
@@ -464,7 +640,8 @@ export default function EmailClientShell({ emails }: Props) {
         <div className="signal-card mt-2 border border-white/10 p-6 text-sm text-slate-300/95 rounded-2xl bg-slate-900/40 backdrop-blur-xl">
           When live, this section will show a focused list of the most important
           threads across your inbox — ranked by Echo, not by recency. Tap a
-          band above to reveal the cinematic threads view.
+          band above to reveal the cinematic threads view, or start a focus
+          block to lock onto your Action emails.
         </div>
       )}
 
@@ -520,16 +697,31 @@ export default function EmailClientShell({ emails }: Props) {
                       __html: draftPreview.htmlBody,
                     }}
                   />
+                ) : draftPreview.bodyPreview ? (
+                  <p className="whitespace-pre-line text-sm">
+                    {draftPreview.bodyPreview}
+                  </p>
+                ) : draftPreview.webLink ? (
+                  <p className="text-xs">
+                    Draft created ·{" "}
+                    <a
+                      className="text-sky-300 underline"
+                      href={draftPreview.webLink}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      open in Outlook
+                    </a>
+                  </p>
                 ) : (
                   <p className="whitespace-pre-line text-sm">
-                    {draftPreview.bodyPreview ??
-                      "Draft created in Outlook. Open your drafts folder to review."}
+                    Draft created in Outlook. Open your drafts folder to review.
                   </p>
                 )}
               </div>
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex gap-2 items-center">
+                <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={handleCopyDraft}
@@ -542,11 +734,7 @@ export default function EmailClientShell({ emails }: Props) {
                   >
                     Copy
                   </button>
-                  {copied && (
-                    <span className="text-[11px] text-sky-300/90">
-                      Copied to clipboard
-                    </span>
-                  )}
+
                   {draftPreview.webLink && (
                     <button
                       type="button"
@@ -577,18 +765,23 @@ export default function EmailClientShell({ emails }: Props) {
 
   // --- Render Band Card with unresolved count ---
   function renderBandCard(band: BandKey, label: string) {
-    const unresolvedCount = unresolvedForBand(band).length;
+    const unresolvedCount =
+      band === "action"
+        ? actionUnresolved.length
+        : band === "follow_up"
+        ? followUpUnresolved.length
+        : noiseUnresolved.length;
 
     const title =
       band === "action" ? "Action" : band === "follow_up" ? "Follow-up" : "Noise";
 
-    const isMuted = focusMode && band !== "action";
+    const disabledInFocus = focusMode && band !== "action";
 
     return (
       <button
         type="button"
-        onClick={() => !isMuted && handleSelectBand(band)}
-        disabled={isMuted}
+        onClick={() => handleSelectBand(band)}
+        disabled={disabledInFocus}
         className={`
           text-left relative overflow-hidden rounded-2xl p-6 sm:p-7
           backdrop-blur-2xl bg-white/[0.07]
@@ -613,7 +806,7 @@ export default function EmailClientShell({ emails }: Props) {
                 : "ring-2 ring-sky-300/80"
               : ""
           }
-          ${isMuted ? "opacity-40 cursor-not-allowed" : ""}
+          ${disabledInFocus ? "opacity-40 cursor-not-allowed hover:translate-y-0" : ""}
         `}
       >
         <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(0,0,0,0.55)]" />
@@ -647,15 +840,15 @@ export default function EmailClientShell({ emails }: Props) {
                 `}
               />
               <span>
-                {isMuted
-                  ? "Muted in focus mode"
-                  : `${unresolvedCount} ${
-                      unresolvedCount === 1
-                        ? "outstanding thread"
-                        : "outstanding threads"
-                    }`}
+                {unresolvedCount}{" "}
+                {unresolvedCount === 1 ? "outstanding thread" : "outstanding threads"}
               </span>
             </span>
+            {focusMode && band !== "action" && (
+              <span className="text-[10px] text-slate-400/80">
+                Paused during focus
+              </span>
+            )}
           </div>
         </div>
       </button>
