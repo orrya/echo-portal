@@ -130,7 +130,7 @@ export default function EmailClientShell({ emails }: Props) {
         ).padStart(2, "0")}`
       : null;
 
-  // Progress in focus session (based on unresolved action at start vs now)
+  // Progress in focus session
   const currentUnresolvedActionCount = actionUnresolved.length;
   const baseline = focusBaselineCount ?? currentUnresolvedActionCount;
   const resolvedThisSession =
@@ -150,7 +150,6 @@ export default function EmailClientShell({ emails }: Props) {
   };
 
   const handleSelectBand = (band: BandKey) => {
-    // In focus mode, only allow Action band
     if (focusMode && band !== "action") return;
     setSelectedBand((prev) => (prev === band ? null : band));
     setDraftError(null);
@@ -195,7 +194,6 @@ export default function EmailClientShell({ emails }: Props) {
 
       if (!res.ok) throw new Error(await res.text());
 
-      // Optimistically update local state so UI reflects "Resolved"
       setLocalEmails((prev) =>
         prev.map((e) =>
           e.id === emailId
@@ -214,7 +212,7 @@ export default function EmailClientShell({ emails }: Props) {
     }
   };
 
-  // ---- Generate reply (calls your n8n-backed /api/generate-reply) ----
+  // ---- Generate reply ----
   const handleGenerateDraft = async (emailId: string) => {
     try {
       setLoadingEmailId(emailId);
@@ -232,8 +230,6 @@ export default function EmailClientShell({ emails }: Props) {
       }
 
       const raw = await res.json();
-
-      // Handle either a single object or an array like your Graph output
       const payload = Array.isArray(raw) ? raw[0] ?? {} : raw ?? {};
 
       const subject =
@@ -271,29 +267,26 @@ export default function EmailClientShell({ emails }: Props) {
     }
   };
 
+  // ✅ FIXED COPY BUTTON
   const handleCopyDraft = async () => {
     if (!draftPreview) return;
 
     const html = draftPreview.htmlBody ?? "";
-    const plainFromHtml =
-      html && html.length > 0
-        ? html.replace(/<[^>]+>/g, " ")
-        : null;
+    const plain = html ? html.replace(/<[^>]+>/g, " ").trim() : null;
 
     const textToCopy =
-      draftPreview.bodyPreview ??
-      (plainFromHtml && plainFromHtml.trim().length > 0
-        ? plainFromHtml
-        : draftPreview.webLink ?? "");
+      plain && plain.length > 0
+        ? plain
+        : draftPreview.bodyPreview ??
+          draftPreview.webLink ??
+          "";
 
     if (!textToCopy) return;
 
     try {
       await navigator.clipboard.writeText(textToCopy);
-      // Lightweight feedback; you can swap for a toast if you like
-      alert("Draft copied to clipboard");
-    } catch (e) {
-      console.error("Clipboard error:", e);
+    } catch (err) {
+      console.error("Clipboard copy error:", err);
     }
   };
 
@@ -368,7 +361,6 @@ export default function EmailClientShell({ emails }: Props) {
               if (focusMode) {
                 stopFocusSession();
               } else {
-                // Default: 25 min auto-start
                 startFocusSession(25);
               }
             }}
@@ -387,7 +379,7 @@ export default function EmailClientShell({ emails }: Props) {
         </div>
       </div>
 
-      {/* When focus mode is active, show a soft progress bar */}
+      {/* Progress bar */}
       {focusMode && (
         <div className="w-full rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3">
           <div className="flex items-center justify-between text-[11px] text-slate-300/85 mb-1.5">
@@ -489,6 +481,7 @@ export default function EmailClientShell({ emails }: Props) {
                           bg-gradient-to-b ${gradientClass}
                         `}
                       />
+
                       <div className="relative pl-4 sm:pl-5 flex flex-col gap-2">
                         {/* Header row */}
                         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -519,7 +512,7 @@ export default function EmailClientShell({ emails }: Props) {
                           </div>
                         </div>
 
-                        {/* Summary text */}
+                        {/* Summary */}
                         <p className="text-xs text-slate-300/90 line-clamp-2">
                           {email.Summary ||
                             email["Action Notes"] ||
@@ -574,7 +567,7 @@ export default function EmailClientShell({ emails }: Props) {
                                 : "Generate reply"}
                             </button>
 
-                            {/* View thread – future Outlook web link */}
+                            {/* View thread */}
                             <button
                               type="button"
                               className="
@@ -591,9 +584,7 @@ export default function EmailClientShell({ emails }: Props) {
                               <button
                                 type="button"
                                 onClick={() => resolveEmail(email.id)}
-                                disabled={
-                                  isLoading && loadingEmailId === email.id
-                                }
+                                disabled={isLoading && loadingEmailId === email.id}
                                 className="
                                   rounded-full border border-fuchsia-500/70
                                   text-[11px] px-3 py-1.5 text-fuchsia-200
@@ -606,7 +597,7 @@ export default function EmailClientShell({ emails }: Props) {
                               </button>
                             )}
 
-                            {/* Noise-specific action placeholder */}
+                            {/* Noise placeholder */}
                             {selectedBand === "noise" && (
                               <button
                                 type="button"
@@ -635,7 +626,6 @@ export default function EmailClientShell({ emails }: Props) {
         )}
       </AnimatePresence>
 
-      {/* Fallback helper text when nothing selected */}
       {!selectedBand && (
         <div className="signal-card mt-2 border border-white/10 p-6 text-sm text-slate-300/95 rounded-2xl bg-slate-900/40 backdrop-blur-xl">
           When live, this section will show a focused list of the most important
@@ -722,6 +712,7 @@ export default function EmailClientShell({ emails }: Props) {
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex gap-2">
+                  {/* Copy button — now working */}
                   <button
                     type="button"
                     onClick={handleCopyDraft}
@@ -844,6 +835,7 @@ export default function EmailClientShell({ emails }: Props) {
                 {unresolvedCount === 1 ? "outstanding thread" : "outstanding threads"}
               </span>
             </span>
+
             {focusMode && band !== "action" && (
               <span className="text-[10px] text-slate-400/80">
                 Paused during focus
