@@ -47,19 +47,19 @@ export default async function EmailPage() {
 
   const all = emails ?? [];
 
-  // --- Filter only unresolved for card counts ---
+  // ---- Filter unresolved ----
   const unresolved = all.filter(
-    (e) => !e["Email Status"] || e["Email Status"]?.toLowerCase() !== "resolved"
+    (e) =>
+      !e["Email Status"] ||
+      e["Email Status"]?.toLowerCase() !== "resolved"
   );
 
   const actionEmails = unresolved.filter(
     (e) => getBandForCategory(e.Category) === "action"
   );
-
   const followUpEmails = unresolved.filter(
     (e) => getBandForCategory(e.Category) === "follow_up"
   );
-
   const noiseEmails = unresolved.filter(
     (e) => getBandForCategory(e.Category) === "noise"
   );
@@ -90,9 +90,9 @@ export default async function EmailPage() {
       </div>
 
       <EmailClientShell
-        actionEmails={all}
-        followUpEmails={all}
-        noiseEmails={all}
+        actionEmails={actionEmails}
+        followUpEmails={followUpEmails}
+        noiseEmails={noiseEmails}
       />
     </div>
   );
