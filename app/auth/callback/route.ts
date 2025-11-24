@@ -15,7 +15,6 @@ export async function GET(req: Request) {
     return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=missing_code`);
   }
 
-  // Azure OAuth config
   const tenantId = process.env.AZURE_TENANT_ID || "common";
   const clientId = process.env.AZURE_CLIENT_ID;
   const clientSecret = process.env.AZURE_CLIENT_SECRET;
@@ -53,6 +52,24 @@ export async function GET(req: Request) {
   const accessToken = tokenData.access_token;
   const refreshToken = tokenData.refresh_token || null;
   const expiresIn = tokenData.expires_in || 3600;
+
+  // -----------------------------------------------------
+  // 🔥 Extract tenant ID (tid) from id_token — NO library
+  // -----------------------------------------------------
+  let userTenantId: string | null = null;
+
+  if (tokenData.id_token) {
+    try {
+      const base64Payload = tokenData.id_token.split(".")[1];
+      const decodedPayload = JSON.parse(
+        Buffer.from(base64Payload, "base64").toString()
+      );
+      userTenantId = decodedPayload?.tid || null;
+    } catch (err) {
+      console.error("Failed to decode id_token:", err);
+    }
+  }
+  // -----------------------------------------------------
 
   // 2. Fetch Azure profile
   const profileRes = await fetch("https://graph.microsoft.com/v1.0/me", {
@@ -112,9 +129,10 @@ export async function GET(req: Request) {
     access_token: accessToken,
     refresh_token: refreshToken,
     expires_at: expiresAtIso,
+    tenant_id: userTenantId, // 🔥 STORED HERE
   });
 
-  // 6. Write OUR OWN AUTH COOKIE
+  // 6. Write auth cookie
   const cookieStore = cookies();
   cookieStore.set(
     "echo-auth",
