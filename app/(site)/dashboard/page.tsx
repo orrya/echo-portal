@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Zap, Mail, Bell } from "lucide-react";
 
 // ✅ ADD THIS
-import DashboardSubscription from "./DashboardSubscription";
+import DashboardSubscription from "./dashboard-subscription";
 
 type DailySummaryRow = {
   Date: string;
