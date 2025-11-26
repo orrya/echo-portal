@@ -6,9 +6,22 @@ export async function getUser() {
     const cookieStore = cookies();
     const raw = cookieStore.get("echo-auth");
 
-    if (!raw) return null;
+    if (!raw?.value) return null;
 
-    const parsed = JSON.parse(raw.value);
+    let parsed: any = null;
+
+    try {
+      // First parse attempt
+      parsed = JSON.parse(raw.value);
+
+      // If cookie was double-encoded, parsed will itself be a string
+      if (typeof parsed === "string") {
+        parsed = JSON.parse(parsed);
+      }
+    } catch (err) {
+      console.error("echo-auth cookie parse error:", err, raw.value);
+      return null;
+    }
 
     if (!parsed?.user_id) return null;
 
@@ -17,7 +30,7 @@ export async function getUser() {
       email: parsed.email ?? null,
     };
   } catch (err) {
-    console.error("getUser parse error:", err);
+    console.error("getUser() error:", err);
     return null;
   }
 }

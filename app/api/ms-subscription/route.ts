@@ -1,4 +1,5 @@
 // app/api/ms-subscription/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { cookies } from 'next/headers';
@@ -7,19 +8,30 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 const RENEWAL_LEAD_MINUTES = 60; // renew if expiring within the next hour
 
 // -------------------------------------------------------
-// AUTH HELPER — replaces supabase.auth.getUser()
+// AUTH HELPER — SAFE COOKIE PARSING
 // -------------------------------------------------------
 function getUserIdFromCookie() {
   const store = cookies();
-  const cookie = store.get("echo-auth");
+  const raw = store.get("echo-auth");
 
-  if (!cookie) return null;
+  if (!raw?.value) return null;
+
+  let parsed: any = null;
+
   try {
-    const parsed = JSON.parse(cookie.value);
-    return parsed.user_id ?? null;
-  } catch {
+    // First decode attempt
+    parsed = JSON.parse(raw.value);
+
+    // If cookie was double-encoded, parse again
+    if (typeof parsed === "string") {
+      parsed = JSON.parse(parsed);
+    }
+  } catch (err) {
+    console.error("echo-auth cookie parse error:", err, raw.value);
     return null;
   }
+
+  return parsed?.user_id ?? null;
 }
 
 // -------------------------------------------------------
@@ -27,7 +39,7 @@ function getUserIdFromCookie() {
 // -------------------------------------------------------
 export async function POST(req: NextRequest) {
   try {
-    // 🔥 Load user from echo-auth cookie
+    // 🔥 Load user from cookie
     const userId = getUserIdFromCookie();
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -36,14 +48,17 @@ export async function POST(req: NextRequest) {
     const supabase = createRouteHandlerClient({ cookies });
 
     const body = await req.json().catch(() => ({}));
+
     const resource =
-      body.resource ?? "me/mailFolders('Inbox')/messages?$filter=isDraft eq false";
+      body.resource ??
+      "me/mailFolders('Inbox')/messages?$filter=isDraft eq false";
 
     const notificationSecret = crypto.randomBytes(24).toString('hex');
 
     const n8nUrl = process.env.N8N_BASE_URL;
     const n8nWebhookPath =
-      process.env.N8N_MS_CREATE_SUBSCRIPTION_PATH ?? '/webhook/ms-create-subscription';
+      process.env.N8N_MS_CREATE_SUBSCRIPTION_PATH ??
+      '/webhook/ms-create-subscription';
     const n8nAuthSecret = process.env.N8N_SHARED_SECRET;
 
     if (!n8nUrl) {
@@ -53,7 +68,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // -----------------------------------------------
     // Call n8n to create subscription
+    // -----------------------------------------------
     const res = await fetch(
       `${n8nUrl.replace(/\/$/, '')}${n8nWebhookPath}`,
       {
@@ -74,7 +91,7 @@ export async function POST(req: NextRequest) {
       const text = await res.text();
       return NextResponse.json(
         { error: 'Failed to create subscription in n8n', details: text },
-        { status: 500 },
+        { status: 500 }
       );
     }
 
@@ -94,6 +111,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // -----------------------------------------------
+    // Store subscription in Supabase
+    // -----------------------------------------------
     const { data, error } = await supabase
       .from('ms_subscriptions')
       .upsert(
@@ -106,7 +126,7 @@ export async function POST(req: NextRequest) {
           expires_at: expirationDateTime,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: 'subscription_id' }
+        { onConflict: 'subscription_id' },
       )
       .select()
       .single();
@@ -121,7 +141,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ subscription: data });
 
   } catch (err: any) {
-    console.error('POST /api/ms-subscription error', err);
+    console.error('POST /api/ms-subscription error:', err);
     return NextResponse.json(
       { error: 'Internal error', details: err?.message },
       { status: 500 }
@@ -130,12 +150,11 @@ export async function POST(req: NextRequest) {
 }
 
 // -------------------------------------------------------
-// GET → Renewal (n8n only)
+// GET → Renewal (n8n calls this only)
 // -------------------------------------------------------
 export async function GET(req: NextRequest) {
   try {
     const mode = req.nextUrl.searchParams.get('mode');
-
     if (mode !== 'due') {
       return NextResponse.json(
         { error: 'Invalid mode', details: 'Only mode=due is supported' },
@@ -143,7 +162,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // n8n secret
+    // Require n8n shared secret
     const auth = req.headers.get('x-n8n-secret');
     if (!auth || auth !== process.env.N8N_SHARED_SECRET) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -171,7 +190,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ subscriptions: data ?? [] });
 
   } catch (err: any) {
-    console.error('GET /api/ms-subscription error', err);
+    console.error('GET /api/ms-subscription error:', err);
     return NextResponse.json(
       { error: 'Internal error', details: err?.message },
       { status: 500 }
@@ -180,7 +199,7 @@ export async function GET(req: NextRequest) {
 }
 
 // -------------------------------------------------------
-// PUT → Update subscription expiration (n8n only)
+// PUT → Update expiration (n8n only)
 // -------------------------------------------------------
 export async function PUT(req: NextRequest) {
   try {
@@ -221,10 +240,10 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ subscription: data });
 
   } catch (err: any) {
-    console.error('PUT /api/ms-subscription error', err);
+    console.error('PUT /api/ms-subscription error:', err);
     return NextResponse.json(
       { error: 'Internal error', details: err?.message },
       { status: 500 },
     );
   }
-} 
+}
