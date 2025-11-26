@@ -1,7 +1,8 @@
 import { getUser } from "@/lib/getUser";
-import { createClient } from "@supabase/supabase-js";
-import { Zap, Mail, Bell } from "lucide-react";
-import { DashboardClientWrapper } from "./client-wrapper"; // <-- 🔥 NEW
+import { Zap } from "lucide-react";
+import { cookies } from "next/headers";
+import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
+import { DashboardClientWrapper } from "./client-wrapper";
 
 type DailySummaryRow = {
   Date: string;
@@ -34,10 +35,8 @@ export default async function DashboardPage() {
     );
   }
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  // ✅ FIX: Correct server-side Supabase client with RLS + cookies
+  const supabase = createServerComponentClient({ cookies });
 
   // ---- SUMMARY STATUS ----
   const { data: summaryRowsRaw } = await supabase
@@ -94,16 +93,16 @@ export default async function DashboardPage() {
   const unresolvedAction = unresolvedEmails.filter(
     (e) => getBand(e.Category) === "action"
   );
+
   const unresolvedFollow = unresolvedEmails.filter(
     (e) => getBand(e.Category) === "follow_up"
   );
+
   const unresolvedNoise = unresolvedEmails.filter(
     (e) => getBand(e.Category) === "noise"
   );
 
   const outstandingActionCount = unresolvedAction.length;
-  const followCount = unresolvedFollow.length;
-  const noiseCount = unresolvedNoise.length;
 
   const keyEmail =
     unresolvedAction
@@ -118,7 +117,7 @@ export default async function DashboardPage() {
   const isConnected = emails.length > 0;
 
   return (
-    <DashboardClientWrapper>   {/* <-- 🔥 WRAP YOUR EXISTING JSX */}
+    <DashboardClientWrapper>
       <div className="mx-auto max-w-6xl px-6 py-10 space-y-10">
         {/* Eyebrow + hero */}
         <div className="space-y-4 pt-6">
@@ -192,8 +191,7 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* All the rest of your JSX stays untouched */}
-        {/* ... */}
+        {/* 🔥 Your other JSX stays below */}
       </div>
     </DashboardClientWrapper>
   );
