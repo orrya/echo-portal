@@ -5,10 +5,10 @@ import crypto from 'crypto';
 import { cookies } from 'next/headers';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 
-const RENEWAL_LEAD_MINUTES = 60; // renew if expiring within the next hour
+const RENEWAL_LEAD_MINUTES = 60;
 
 // -------------------------------------------------------
-// AUTH HELPER — SAFE COOKIE PARSING
+// AUTH HELPER — fully safe cookie decoding
 // -------------------------------------------------------
 function getUserIdFromCookie() {
   const store = cookies();
@@ -16,18 +16,27 @@ function getUserIdFromCookie() {
 
   if (!raw?.value) return null;
 
+  let value = raw.value;
+
+  // Step 1 — decode URI-encoded cookies
+  try {
+    value = decodeURIComponent(value);
+  } catch {
+    // ignore — means cookie was not encoded
+  }
+
   let parsed: any = null;
 
+  // Step 2 — parse JSON
   try {
-    // First decode attempt
-    parsed = JSON.parse(raw.value);
+    parsed = JSON.parse(value);
 
-    // If cookie was double-encoded, parse again
+    // Step 3 — handle double-encoded JSON (string containing JSON)
     if (typeof parsed === "string") {
       parsed = JSON.parse(parsed);
     }
   } catch (err) {
-    console.error("echo-auth cookie parse error:", err, raw.value);
+    console.error("❌ echo-auth cookie parse error:", err, "raw:", raw.value);
     return null;
   }
 
@@ -39,14 +48,13 @@ function getUserIdFromCookie() {
 // -------------------------------------------------------
 export async function POST(req: NextRequest) {
   try {
-    // 🔥 Load user from cookie
+    // Load authenticated user
     const userId = getUserIdFromCookie();
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const supabase = createRouteHandlerClient({ cookies });
-
     const body = await req.json().catch(() => ({}));
 
     const resource =
@@ -64,13 +72,11 @@ export async function POST(req: NextRequest) {
     if (!n8nUrl) {
       return NextResponse.json(
         { error: 'N8N_BASE_URL not configured' },
-        { status: 500 },
+        { status: 500 }
       );
     }
 
-    // -----------------------------------------------
-    // Call n8n to create subscription
-    // -----------------------------------------------
+    // Call n8n webhook
     const res = await fetch(
       `${n8nUrl.replace(/\/$/, '')}${n8nWebhookPath}`,
       {
@@ -84,7 +90,7 @@ export async function POST(req: NextRequest) {
           resource,
           notificationSecret,
         }),
-      },
+      }
     );
 
     if (!res.ok) {
@@ -111,9 +117,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // -----------------------------------------------
-    // Store subscription in Supabase
-    // -----------------------------------------------
+    // Save subscription
     const { data, error } = await supabase
       .from('ms_subscriptions')
       .upsert(
@@ -126,7 +130,7 @@ export async function POST(req: NextRequest) {
           expires_at: expirationDateTime,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: 'subscription_id' },
+        { onConflict: 'subscription_id' }
       )
       .select()
       .single();
@@ -150,7 +154,7 @@ export async function POST(req: NextRequest) {
 }
 
 // -------------------------------------------------------
-// GET → Renewal (n8n calls this only)
+// GET → Renewal (n8n only)
 // -------------------------------------------------------
 export async function GET(req: NextRequest) {
   try {
@@ -158,11 +162,10 @@ export async function GET(req: NextRequest) {
     if (mode !== 'due') {
       return NextResponse.json(
         { error: 'Invalid mode', details: 'Only mode=due is supported' },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
-    // Require n8n shared secret
     const auth = req.headers.get('x-n8n-secret');
     if (!auth || auth !== process.env.N8N_SHARED_SECRET) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -172,7 +175,7 @@ export async function GET(req: NextRequest) {
 
     const now = new Date();
     const cutoff = new Date(
-      now.getTime() + RENEWAL_LEAD_MINUTES * 60 * 1000,
+      now.getTime() + RENEWAL_LEAD_MINUTES * 60 * 1000
     ).toISOString();
 
     const { data, error } = await supabase
@@ -243,7 +246,7 @@ export async function PUT(req: NextRequest) {
     console.error('PUT /api/ms-subscription error:', err);
     return NextResponse.json(
       { error: 'Internal error', details: err?.message },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

@@ -8,26 +8,32 @@ export async function getUser() {
 
     if (!raw?.value) return null;
 
+    let value = raw.value;
+
+    // Decode URL-encoded cookie values
+    try {
+      value = decodeURIComponent(value);
+    } catch {
+      // If not encoded, that's fine
+    }
+
     let parsed: any = null;
 
     try {
-      // First parse attempt
-      parsed = JSON.parse(raw.value);
+      parsed = JSON.parse(value);
 
-      // If cookie was double-encoded, parsed will itself be a string
+      // In case of double-encoded JSON
       if (typeof parsed === "string") {
         parsed = JSON.parse(parsed);
       }
     } catch (err) {
-      console.error("echo-auth cookie parse error:", err, raw.value);
+      console.error("Failed to parse echo-auth cookie:", value);
       return null;
     }
 
-    if (!parsed?.user_id) return null;
-
     return {
       id: parsed.user_id,
-      email: parsed.email ?? null,
+      email: parsed.email,
     };
   } catch (err) {
     console.error("getUser() error:", err);
