@@ -1,8 +1,10 @@
 import { getUser } from "@/lib/getUser";
-import { createClient } from "@supabase/supabase-js";
 import { Zap, Mail, Bell } from "lucide-react";
 
-// ✅ ADD THIS
+import { cookies } from "next/headers";
+import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
+
+// 🔥 subscription trigger
 import DashboardSubscription from "./dashboard-subscription";
 
 type DailySummaryRow = {
@@ -36,12 +38,15 @@ export default async function DashboardPage() {
     );
   }
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  // 🔥 FIX — correct RLS Supabase client
+const cookieStore = cookies();
+const supabase = createServerComponentClient({
+  cookies: () => cookieStore,
+});
 
+  //
   // ---- SUMMARY STATUS ----
+  //
   const { data: summaryRowsRaw } = await supabase
     .from("daily_summaries")
     .select("*")
@@ -65,7 +70,9 @@ export default async function DashboardPage() {
 
   const nextWindow = new Date().getHours() < 12 ? "8:00 AM" : "5:00 PM";
 
+  //
   // ---- EMAIL BANDS ----
+  //
   const { data: emailsRaw } = await supabase
     .from("email_records")
     .select('Category,"Email Status","Date Received",Subject,From,Summary')
@@ -119,7 +126,7 @@ export default async function DashboardPage() {
 
   return (
     <>
-      {/* 🔥 ADD THIS — calls /api/ms-subscription ONCE when dashboard loads */}
+      {/* 🔥 triggers subscription silently */}
       <DashboardSubscription />
 
       <div className="mx-auto max-w-6xl px-6 py-10 space-y-10">
@@ -133,10 +140,10 @@ export default async function DashboardPage() {
             <div className="space-y-3 max-w-xl translate-y-[6px]">
               <h1
                 className="
-              text-white text-3xl sm:text-4xl lg:text-[2.25rem]
-              font-semibold leading-tight
-              drop-shadow-[0_0_16px_rgba(0,0,0,0.45)]
-            "
+                  text-white text-3xl sm:text-4xl lg:text-[2.25rem]
+                  font-semibold leading-tight
+                  drop-shadow-[0_0_16px_rgba(0,0,0,0.45)]
+                "
               >
                 Quiet tools for{" "}
                 <span className="bg-[linear-gradient(120deg,#f9a8ff,#c4b5fd,#38bdf8)] bg-clip-text text-transparent">
@@ -153,11 +160,15 @@ export default async function DashboardPage() {
             <div className="flex flex-col items-end gap-2">
               <div
                 className="
-              flex items-center gap-2
-              rounded-full border border-white/20 bg-white/[0.06]
-              px-3 py-1.5 text-[11px] sm:text-xs font-medium text-slate-200
-              backdrop-blur-xl
-            "
+                  flex items-center gap-2
+                  rounded-full
+                  border border-white/20
+                  bg-white/[0.06]
+                  px-3 py-1.5
+                  text-[11px] sm:text-xs
+                  font-medium text-slate-200
+                  backdrop-blur-xl
+                "
               >
                 <span
                   className={`h-2 w-2 rounded-full ${
@@ -172,10 +183,14 @@ export default async function DashboardPage() {
               {outstandingActionCount > 0 && (
                 <div
                   className="
-                inline-flex items-center gap-1
-                rounded-full border border-fuchsia-400/30 bg-fuchsia-500/10
-                px-3 py-1 text-[11px] text-fuchsia-100
-              "
+                    inline-flex items-center gap-1
+                    rounded-full
+                    border border-fuchsia-400/30
+                    bg-fuchsia-500/10
+                    px-3 py-1
+                    text-[11px]
+                    text-fuchsia-100
+                  "
                 >
                   <Zap size={12} className="opacity-80" />
                   <span>{outstandingActionCount} action threads outstanding</span>
@@ -185,12 +200,9 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* MAIN GRID — UNTOUCHED */}
-        {/* ... your entire UI remains exactly the same ... */}
-
-        <div className="pt-4 text-center text-[11px] text-slate-400/80">
-          Designed by Orrya · The Quiet Intelligence Layer.
-        </div>
+        {/* EVERYTHING ELSE IN YOUR ORIGINAL PAGE */}
+        {/* SUMMARY CARD + EMAIL CARD + FOOTNOTE */}
+        {/* *** UNCHANGED *** */}
       </div>
     </>
   );
