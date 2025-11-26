@@ -53,11 +53,8 @@ export async function GET(req: Request) {
   const refreshToken = tokenData.refresh_token || null;
   const expiresIn = tokenData.expires_in || 3600;
 
-  // -----------------------------------------------------
-  // 🔥 Extract tenant ID (tid) from id_token — NO library
-  // -----------------------------------------------------
+  // Decode tenant ID
   let userTenantId: string | null = null;
-
   if (tokenData.id_token) {
     try {
       const base64Payload = tokenData.id_token.split(".")[1];
@@ -69,7 +66,6 @@ export async function GET(req: Request) {
       console.error("Failed to decode id_token:", err);
     }
   }
-  // -----------------------------------------------------
 
   // 2. Fetch Azure profile
   const profileRes = await fetch("https://graph.microsoft.com/v1.0/me", {
@@ -129,22 +125,11 @@ export async function GET(req: Request) {
     access_token: accessToken,
     refresh_token: refreshToken,
     expires_at: expiresAtIso,
-    tenant_id: userTenantId, // 🔥 STORED HERE
+    tenant_id: userTenantId,
   });
 
-  // -----------------------------------------------------
-  // 🔥 NEW REQUIRED STEP:
-  // Create Microsoft Graph Subscription (Next.js → n8n)
-  // -----------------------------------------------------
-  try {
-    await fetch(`${siteUrl}/api/ms-subscription`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}), // nothing needed; user determined from cookie
-    });
-  } catch (err) {
-    console.error("Failed to create MS subscription:", err);
-  }
+  // ❌ REMOVE subscription call from callback
+  // It causes cookie not to be written.
 
   // 6. Write auth cookie
   const cookieStore = cookies();
