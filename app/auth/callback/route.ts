@@ -132,6 +132,20 @@ export async function GET(req: Request) {
     tenant_id: userTenantId, // 🔥 STORED HERE
   });
 
+  // -----------------------------------------------------
+  // 🔥 NEW REQUIRED STEP:
+  // Create Microsoft Graph Subscription (Next.js → n8n)
+  // -----------------------------------------------------
+  try {
+    await fetch(`${siteUrl}/api/ms-subscription`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}), // nothing needed; user determined from cookie
+    });
+  } catch (err) {
+    console.error("Failed to create MS subscription:", err);
+  }
+
   // 6. Write auth cookie
   const cookieStore = cookies();
   cookieStore.set(
