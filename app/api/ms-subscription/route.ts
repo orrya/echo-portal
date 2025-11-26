@@ -2,26 +2,38 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { cookies } from 'next/headers';
-// Supabase server client
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 
 const RENEWAL_LEAD_MINUTES = 60; // renew if expiring within the next hour
 
 // -------------------------------------------------------
-// POST → Create subscription
+// AUTH HELPER — replaces supabase.auth.getUser()
+// -------------------------------------------------------
+function getUserIdFromCookie() {
+  const store = cookies();
+  const cookie = store.get("echo-auth");
+
+  if (!cookie) return null;
+  try {
+    const parsed = JSON.parse(cookie.value);
+    return parsed.user_id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// -------------------------------------------------------
+// POST → Create Subscription
 // -------------------------------------------------------
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
-
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
+    // 🔥 Load user from echo-auth cookie
+    const userId = getUserIdFromCookie();
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const supabase = createRouteHandlerClient({ cookies });
 
     const body = await req.json().catch(() => ({}));
     const resource =
@@ -41,6 +53,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Call n8n to create subscription
     const res = await fetch(
       `${n8nUrl.replace(/\/$/, '')}${n8nWebhookPath}`,
       {
@@ -50,7 +63,7 @@ export async function POST(req: NextRequest) {
           ...(n8nAuthSecret ? { 'x-n8n-secret': n8nAuthSecret } : {}),
         },
         body: JSON.stringify({
-          userId: user.id,
+          userId,
           resource,
           notificationSecret,
         }),
@@ -77,7 +90,7 @@ export async function POST(req: NextRequest) {
     if (!subscriptionId || !expirationDateTime || !clientState) {
       return NextResponse.json(
         { error: 'Invalid subscription payload from n8n', subscription },
-        { status: 500 },
+        { status: 500 }
       );
     }
 
@@ -85,7 +98,7 @@ export async function POST(req: NextRequest) {
       .from('ms_subscriptions')
       .upsert(
         {
-          user_id: user.id,
+          user_id: userId,
           subscription_id: subscriptionId,
           resource: subResource ?? resource,
           client_state: clientState,
@@ -93,7 +106,7 @@ export async function POST(req: NextRequest) {
           expires_at: expirationDateTime,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: 'subscription_id' },
+        { onConflict: 'subscription_id' }
       )
       .select()
       .single();
@@ -101,22 +114,23 @@ export async function POST(req: NextRequest) {
     if (error) {
       return NextResponse.json(
         { error: 'Failed to save subscription', details: error.message },
-        { status: 500 },
+        { status: 500 }
       );
     }
 
     return NextResponse.json({ subscription: data });
+
   } catch (err: any) {
     console.error('POST /api/ms-subscription error', err);
     return NextResponse.json(
       { error: 'Internal error', details: err?.message },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }
 
 // -------------------------------------------------------
-// GET → For renewal workflow: /api/ms-subscription?mode=due
+// GET → Renewal (n8n only)
 // -------------------------------------------------------
 export async function GET(req: NextRequest) {
   try {
@@ -125,11 +139,11 @@ export async function GET(req: NextRequest) {
     if (mode !== 'due') {
       return NextResponse.json(
         { error: 'Invalid mode', details: 'Only mode=due is supported' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // Check n8n shared secret
+    // n8n secret
     const auth = req.headers.get('x-n8n-secret');
     if (!auth || auth !== process.env.N8N_SHARED_SECRET) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -150,23 +164,23 @@ export async function GET(req: NextRequest) {
     if (error) {
       return NextResponse.json(
         { error: 'Failed to fetch due subscriptions', details: error.message },
-        { status: 500 },
+        { status: 500 }
       );
     }
 
     return NextResponse.json({ subscriptions: data ?? [] });
+
   } catch (err: any) {
     console.error('GET /api/ms-subscription error', err);
     return NextResponse.json(
       { error: 'Internal error', details: err?.message },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }
 
 // -------------------------------------------------------
-// PUT → Update subscription after renewal
-// Body: { subscriptionId, expiresAt }
+// PUT → Update subscription expiration (n8n only)
 // -------------------------------------------------------
 export async function PUT(req: NextRequest) {
   try {
@@ -181,7 +195,7 @@ export async function PUT(req: NextRequest) {
     if (!subscriptionId || !expiresAt) {
       return NextResponse.json(
         { error: 'subscriptionId and expiresAt are required' },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
@@ -200,11 +214,12 @@ export async function PUT(req: NextRequest) {
     if (error) {
       return NextResponse.json(
         { error: 'Failed to update subscription', details: error.message },
-        { status: 500 },
+        { status: 500 }
       );
     }
 
     return NextResponse.json({ subscription: data });
+
   } catch (err: any) {
     console.error('PUT /api/ms-subscription error', err);
     return NextResponse.json(
