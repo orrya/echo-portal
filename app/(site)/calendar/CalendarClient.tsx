@@ -32,20 +32,15 @@ type CalendarInsights = {
 
 type Snapshot = {
   date: string;
-  // API shape (camelCase)
   calendarInsights?: CalendarInsights | null;
   dayTimeline?: TimelineItem[] | null;
-  // Fallback if you ever read straight from DB in future (snake_case)
   calendar_insights?: CalendarInsights | null;
   day_timeline?: TimelineItem[] | null;
 };
 
 export default function CalendarClient({ snapshot }: { snapshot: Snapshot | null }) {
-  const [selectedMeeting, setSelectedMeeting] = useState<TimelineItem | null>(
-    null
-  );
+  const [selectedMeeting, setSelectedMeeting] = useState<TimelineItem | null>(null);
 
-  // Accept either camelCase or snake_case from the API
   const rawInsights =
     snapshot?.calendarInsights ?? snapshot?.calendar_insights ?? null;
 
@@ -72,14 +67,12 @@ export default function CalendarClient({ snapshot }: { snapshot: Snapshot | null
   const deepWork = insights.deepWorkWindows ?? [];
   const followUp = insights.likelyFollowUp ?? [];
 
-  const dateLabel = snapshot.date
-    ? new Date(snapshot.date).toLocaleDateString("en-GB", {
-        weekday: "short",
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
-    : "Today";
+  const dateLabel = new Date(snapshot.date).toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 
   const loadLabel =
     workAbility >= 80
@@ -110,15 +103,6 @@ export default function CalendarClient({ snapshot }: { snapshot: Snapshot | null
             Echo scans meetings, gaps and context switches to show how much of
             today is left for real work.
           </p>
-
-          {/* Legend / key */}
-          <div className="mt-4 flex flex-wrap gap-3 text-[11px] text-slate-400">
-            <span>🟢 Low-noise meeting</span>
-            <span>🟡 Moderate-noise meeting</span>
-            <span>🔴 High-noise meeting</span>
-            <span>🟦 Deep-work window</span>
-            <span>🔹 Day fracture</span>
-          </div>
         </div>
 
         {/* TODAY PILL */}
@@ -127,9 +111,7 @@ export default function CalendarClient({ snapshot }: { snapshot: Snapshot | null
             <p className="text-[10px] tracking-[0.24em] text-slate-400 uppercase">
               Today
             </p>
-            <p className="mt-1 text-sm font-medium text-slate-100">
-              {dateLabel}
-            </p>
+            <p className="mt-1 text-sm font-medium text-slate-100">{dateLabel}</p>
             <p className="mt-2 text-xs text-slate-300">
               <span className="font-semibold text-sky-300">
                 Focus capacity: {workAbility}%
@@ -143,13 +125,36 @@ export default function CalendarClient({ snapshot }: { snapshot: Snapshot | null
         </div>
       </header>
 
+      {/* ------------------------------------------------ */}
+      {/* 🔥 BLOCK 1 — TODAY’S WORK STORY (AI TONE) */}
+      {/* ------------------------------------------------ */}
+      <section className="rounded-3xl border border-slate-800 bg-slate-950/70 px-6 py-6 shadow-[0_0_40px_rgba(15,23,42,0.7)]">
+        <h2 className="text-xs font-semibold tracking-[0.22em] text-slate-300/80 uppercase">
+          Today’s Work Story
+        </h2>
+
+        <p className="mt-3 text-sm text-slate-300 leading-relaxed">
+          {workAbility > 75
+            ? "Your day is steady and spacious, with healthy pockets of clarity."
+            : workAbility > 60
+            ? "Your morning is slightly fractured but the afternoon clears. Focus remains workable."
+            : workAbility > 45
+            ? "Your day is mixed — productivity will require intention around switching."
+            : "Today is structurally noisy with limited uninterrupted time — small wins matter most."}
+        </p>
+
+        <p className="mt-2 text-sm text-slate-400">
+          {deepWork.length > 0
+            ? `Your strongest deep-work block begins at ${formatTime(
+                deepWork[0].start
+              )}.`
+            : "No natural deep-focus windows appear — Echo recommends manually protecting one."}
+        </p>
+      </section>
+
       {/* METRICS BAR */}
       <section className="flex flex-wrap gap-3">
-        <MetricChip
-          label="Focus capacity"
-          value={`${workAbility}%`}
-          subtitle={loadLabel}
-        />
+        <MetricChip label="Focus capacity" value={`${workAbility}%`} subtitle={loadLabel} />
         <MetricChip
           label="Time booked"
           value={`${meetingCount} meetings`}
@@ -160,33 +165,23 @@ export default function CalendarClient({ snapshot }: { snapshot: Snapshot | null
           value={fractures}
           subtitle={`${fractureMinutes} min lost`}
         />
-        <MetricChip
-          label="Switch cost"
-          value={switches}
-          subtitle={`${switchCost ?? 0} min tax`}
-        />
+        <MetricChip label="Switch cost" value={switches} subtitle={`${switchCost} min tax`} />
       </section>
 
       {/* MAIN GRID */}
       <section className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1.1fr)] gap-10">
         {/* LEFT: DAY FRAME */}
         <div className="rounded-3xl border border-slate-800 bg-slate-950/70 px-6 py-5 shadow-[0_0_60px_rgba(15,23,42,0.9)]">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-xs font-semibold tracking-[0.22em] text-slate-300/80 uppercase">
-                Day frame
-              </h2>
-              <p className="mt-1 text-xs text-slate-400">
-                High-noise blocks are where your day fractures.
-              </p>
-            </div>
-          </div>
+          <h2 className="text-xs font-semibold tracking-[0.22em] text-slate-300/80 uppercase">
+            Day frame
+          </h2>
+          <p className="mt-1 text-xs text-slate-400">
+            High-noise blocks fracture attention and reduce clarity.
+          </p>
 
-          <div className="space-y-5">
+          <div className="mt-4 space-y-5">
             {timeline.length === 0 && (
-              <p className="text-sm text-slate-500">
-                No meetings in today’s calendar.
-              </p>
+              <p className="text-sm text-slate-500">No meetings in today’s calendar.</p>
             )}
 
             {timeline.map((m, idx) => (
@@ -206,17 +201,12 @@ export default function CalendarClient({ snapshot }: { snapshot: Snapshot | null
         <div className="space-y-6">
           {/* Deep work */}
           <div className="rounded-3xl border border-emerald-500/40 bg-emerald-900/10 px-5 py-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xs font-semibold tracking-[0.22em] text-emerald-200 uppercase">
-                  Deep-work windows
-                </h2>
-                <p className="mt-1 text-xs text-emerald-100/80">
-                  Echo scans gaps ≥ 60 minutes and suggests where to defend
-                  focused work.
-                </p>
-              </div>
-            </div>
+            <h2 className="text-xs font-semibold tracking-[0.22em] text-emerald-200 uppercase">
+              Deep-work windows
+            </h2>
+            <p className="mt-1 text-xs text-emerald-100/80">
+              Echo identifies uninterrupted blocks to help you defend your best work.
+            </p>
 
             <div className="mt-4 space-y-3">
               {deepWork.length === 0 && (
@@ -226,14 +216,22 @@ export default function CalendarClient({ snapshot }: { snapshot: Snapshot | null
               )}
 
               {deepWork.map((w, i) => (
-                <DeepWorkCard key={i} window={w} />
+                <div key={i} className="space-y-2">
+                  <DeepWorkCard window={w} />
+                  {/* --> DEFEND BUTTON */}
+                  <button
+                    className="text-xs text-emerald-200 underline hover:text-emerald-100"
+                    onClick={() => alert("Echo would protect this window by auto-blocking the time and drafting a polite auto-response.")}
+                  >
+                    Defend this block
+                  </button>
+                </div>
               ))}
             </div>
 
             {showBreakHint && (
               <p className="mt-4 text-xs text-emerald-200">
-                🧘‍♂️ Recommended: protect 10 minutes of breathing space around
-                at least one deep-work block to reset context.
+                🧘‍♂️ Recommended: take 10 minutes between blocks to reset context.
               </p>
             )}
           </div>
@@ -244,13 +242,64 @@ export default function CalendarClient({ snapshot }: { snapshot: Snapshot | null
               Noise & follow-up risk
             </h2>
             <p className="mt-1 text-xs text-slate-400">
-              Meetings with higher noise scores tend to generate outsized
-              follow-up and attention drag.
+              High-noise meetings tend to generate outsized follow-up.
             </p>
 
-            <div className="mt-4 space-y-3">
+            {/* ------------------------------------------------ */}
+            {/* 🔥 BLOCK 2 — MEETINGS THAT SHOULD NOT EXIST */}
+            {/* ------------------------------------------------ */}
+            <div className="mt-6">
+              <h3 className="text-[11px] font-semibold tracking-[0.2em] uppercase text-red-300/80">
+                Meetings That Should Not Exist (Experimental)
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Flagged based on noise, value, attendance and purpose.
+              </p>
+
+              {timeline.filter(
+                (m) =>
+                  (m.noiseScore ?? 0) >= 4 &&
+                  m.attendees <= 2 &&
+                  m.minutes <= 30 &&
+                  /(catch|sync|check|review)/i.test(m.title)
+              ).length === 0 && (
+                <p className="text-sm text-slate-500 mt-2">
+                  No meetings flagged as low-value today.
+                </p>
+              )}
+
+              <div className="mt-3 space-y-3">
+                {timeline
+                  .filter(
+                    (m) =>
+                      (m.noiseScore ?? 0) >= 4 &&
+                      m.attendees <= 2 &&
+                      m.minutes <= 30 &&
+                      /(catch|sync|check|review)/i.test(m.title)
+                  )
+                  .map((m, i) => (
+                    <div
+                      key={i}
+                      className="rounded-xl border border-red-500/60 bg-red-900/20 px-4 py-3 text-sm text-red-50/90"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">{m.title}</span>
+                        <span className="text-[11px] uppercase tracking-[0.18em] text-red-200">
+                          Noise {m.noiseScore}
+                        </span>
+                      </div>
+                      <p className="text-xs mt-1 text-red-100/80">
+                        {m.attendees} attendee(s) · {formatTime(m.start)} · flagged as low-value
+                      </p>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            {/* Existing follow-up section */}
+            <div className="mt-6 space-y-3">
               {followUp.length === 0 && (
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-slate-500">
                   No obviously noisy or follow-up-heavy meetings detected.
                 </p>
               )}
@@ -267,8 +316,7 @@ export default function CalendarClient({ snapshot }: { snapshot: Snapshot | null
                     </span>
                   </div>
                   <p className="text-xs mt-1 text-red-100/80">
-                    {m.attendees?.length ?? 0} attendee(s) ·{" "}
-                    {formatTime(m.start)}
+                    {m.attendees?.length ?? 0} attendee(s) · {formatTime(m.start)}
                   </p>
                 </div>
               ))}
@@ -277,52 +325,72 @@ export default function CalendarClient({ snapshot }: { snapshot: Snapshot | null
         </div>
       </section>
 
-      {/* MEETING DETAIL MODAL */}
+      {/* ------------------------------------------------ */}
+      {/* 🔥 BLOCK 3 — TOMORROW FORECAST */}
+      {/* ------------------------------------------------ */}
+      <section className="rounded-3xl border border-sky-700/40 bg-sky-900/20 px-6 py-6 shadow-[0_0_40px_rgba(56,189,248,0.3)]">
+        <h2 className="text-xs font-semibold tracking-[0.22em] text-sky-300 uppercase">
+          Tomorrow’s Forecast (Experimental)
+        </h2>
+
+        <p className="mt-3 text-sm text-slate-300 leading-relaxed">
+          Based on today’s load patterns and your recent cadence, Echo estimates:
+        </p>
+
+        <ul className="mt-3 space-y-2 text-sm text-slate-300">
+          <li>
+            •{" "}
+            <span className="text-sky-300 font-medium">
+              {Math.max(30, Math.min(90, workAbility + (meetingCount > 2 ? -8 : 6)))}%
+            </span>{" "}
+            projected focus capacity.
+          </li>
+
+          <li>
+            •{" "}
+            <span className="text-sky-300 font-medium">
+              {meetingCount > 2 ? "Afternoon" : "Morning"}
+            </span>{" "}
+            looks clearest for deep work.
+          </li>
+
+          <li>
+            •{" "}
+            {meetingCount > 3
+              ? "Expect drag from today’s meeting density."
+              : "Energy curve resets well — minimal residual drag."}
+          </li>
+        </ul>
+
+        <p className="mt-3 text-xs text-slate-400">
+          Full predictive scheduling activates once Outlook ingestion is live.
+        </p>
+      </section>
+
       {selectedMeeting && (
-        <MeetingDetailModal
-          meeting={selectedMeeting}
-          onClose={() => setSelectedMeeting(null)}
-        />
+        <MeetingDetailModal meeting={selectedMeeting} onClose={() => setSelectedMeeting(null)} />
       )}
     </div>
   );
 }
 
-/* -----------------------------
+/* --------------------------------------------
    SMALL COMPONENTS
-------------------------------*/
+--------------------------------------------- */
 
-function MetricChip({
-  label,
-  value,
-  subtitle,
-}: {
-  label: string;
-  value: string | number;
-  subtitle?: string;
-}) {
+function MetricChip({ label, value, subtitle }: { label: string; value: string | number; subtitle?: string }) {
   return (
     <div className="rounded-full border border-slate-700/80 bg-slate-900/70 px-4 py-2 text-xs text-slate-200 flex items-center gap-2">
-      <span className="uppercase tracking-[0.18em] text-[10px] text-slate-400">
-        {label}
-      </span>
+      <span className="uppercase tracking-[0.18em] text-[10px] text-slate-400">{label}</span>
       <span className="font-semibold text-sm">{value}</span>
-      {subtitle && (
-        <span className="text-[11px] text-slate-400 whitespace-nowrap">
-          · {subtitle}
-        </span>
-      )}
+      {subtitle && <span className="text-[11px] text-slate-400 whitespace-nowrap">· {subtitle}</span>}
     </div>
   );
 }
 
 function MeetingRow({ meeting }: { meeting: TimelineItem }) {
   const level =
-    meeting.noiseScore >= 7
-      ? "high"
-      : meeting.noiseScore >= 4
-      ? "medium"
-      : "low";
+    meeting.noiseScore >= 7 ? "high" : meeting.noiseScore >= 4 ? "medium" : "low";
 
   const dotColor =
     level === "high"
@@ -344,43 +412,32 @@ function MeetingRow({ meeting }: { meeting: TimelineItem }) {
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/60 px-4 py-3 hover:border-slate-500/80 transition-colors">
       <div className="flex gap-3">
-        {/* Time rail + dot */}
         <div className="flex flex-col items-center w-16 text-[11px] text-slate-400 pt-1">
           <span>{formatTime(meeting.start)}</span>
           <span className="opacity-60">{meeting.minutes} min</span>
         </div>
 
         <div className="flex flex-col items-center pt-2">
-          <span
-            className={`h-2 w-2 rounded-full ${dotColor} shadow-[0_0_10px_rgba(34,197,94,0.6)]`}
-          />
+          <span className={`h-2 w-2 rounded-full ${dotColor} shadow-[0_0_10px_rgba(34,197,94,0.6)]`} />
         </div>
 
-        {/* Card */}
         <div className="flex-1">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-slate-100">
-              {meeting.title || "Untitled meeting"}
-            </p>
+            <p className="text-sm font-medium text-slate-100">{meeting.title}</p>
             <span className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
               {meeting.type === "online" ? "Online" : "In person"}
             </span>
           </div>
 
           <p className="mt-1 text-xs text-slate-400">
-            {formatTime(meeting.start)} — {formatTime(meeting.end)} ·{" "}
-            {meeting.attendees} attendee(s)
+            {formatTime(meeting.start)} — {formatTime(meeting.end)} · {meeting.attendees} attendee(s)
           </p>
 
           <div className="mt-2 flex items-center gap-3">
-            <span
-              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] ${badgeBg}`}
-            >
+            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] ${badgeBg}`}>
               {label}
             </span>
-            <span className="text-[11px] text-slate-400">
-              Noise score {meeting.noiseScore}
-            </span>
+            <span className="text-[11px] text-slate-400">Noise score {meeting.noiseScore}</span>
           </div>
         </div>
       </div>
@@ -391,76 +448,51 @@ function MeetingRow({ meeting }: { meeting: TimelineItem }) {
 function DeepWorkCard({ window }: { window: DeepWorkWindow }) {
   return (
     <div className="rounded-2xl border border-emerald-500/60 bg-emerald-900/30 px-4 py-3">
-      <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-200">
-        Deep-work window
-      </p>
+      <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-200">Deep-work window</p>
       <p className="mt-1 text-sm text-emerald-50">
         {formatTime(window.start)} — {formatTime(window.end)}{" "}
-        <span className="ml-2 text-[11px] text-emerald-100/80">
-          • {window.minutes} mins
-        </span>
+        <span className="ml-2 text-[11px] text-emerald-100/80">• {window.minutes} mins</span>
       </p>
     </div>
   );
 }
 
-function MeetingDetailModal({
-  meeting,
-  onClose,
-}: {
-  meeting: TimelineItem;
-  onClose: () => void;
-}) {
+function MeetingDetailModal({ meeting, onClose }: { meeting: TimelineItem; onClose: () => void }) {
   const level =
-    meeting.noiseScore >= 7
-      ? "High noise"
-      : meeting.noiseScore >= 4
-      ? "Moderate noise"
-      : "Low noise";
+    meeting.noiseScore >= 7 ? "High noise" : meeting.noiseScore >= 4 ? "Moderate noise" : "Low noise";
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 px-6 py-5 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-              Meeting detail
-            </p>
-            <h2 className="mt-1 text-lg font-semibold text-white">
-              {meeting.title || "Untitled meeting"}
-            </h2>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Meeting detail</p>
+            <h2 className="mt-1 text-lg font-semibold text-white">{meeting.title}</h2>
           </div>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-100 text-sm"
-          >
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-100 text-sm">
             Close
           </button>
         </div>
 
         <div className="mt-4 space-y-2 text-sm text-slate-200">
           <p>
-            <span className="text-slate-400">Time:</span>{" "}
-            {formatTime(meeting.start)} — {formatTime(meeting.end)} (
-            {meeting.minutes} mins)
+            <span className="text-slate-400">Time:</span> {formatTime(meeting.start)} —{" "}
+            {formatTime(meeting.end)} ({meeting.minutes} mins)
           </p>
           <p>
             <span className="text-slate-400">Type:</span>{" "}
             {meeting.type === "online" ? "Online" : "In person"}
           </p>
           <p>
-            <span className="text-slate-400">Attendees:</span>{" "}
-            {meeting.attendees}
+            <span className="text-slate-400">Attendees:</span> {meeting.attendees}
           </p>
           <p>
-            <span className="text-slate-400">Noise score:</span>{" "}
-            {meeting.noiseScore} ({level})
+            <span className="text-slate-400">Noise score:</span> {meeting.noiseScore} ({level})
           </p>
         </div>
 
         <p className="mt-4 text-xs text-slate-400">
-          Echo uses noise score, attendees and timing to estimate follow-up and
-          attention drag for this meeting.
+          Echo uses noise score, attendees and timing to estimate follow-up and attention drag.
         </p>
       </div>
     </div>
