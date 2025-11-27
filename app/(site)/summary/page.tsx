@@ -1,19 +1,56 @@
-// app/(site)/summary/page.tsx
 import { getUser } from "@/lib/getUser";
 import { createClient } from "@supabase/supabase-js";
 import SummaryShell from "./SummaryShell";
 
-type SummaryRow = {
+type Metrics = {
+  emailsReceived?: number | null;
+  emailsSent?: number | null;
+  actionEmailsResolved?: number | null;
+  meetings?: number | null;
+  [key: string]: any;
+};
+
+export type SummaryRow = {
   id: string;
   date: string; // "2025-11-20"
   mode: "am" | "pm";
   reflection: string;
-  actionEmailsReceived: number | null;
-  actionEmailsResolved: number | null;
-  emailsReceived: number | null;
-  emailsSent: number | null;
-  meetings: number | null;
+  wins: string[];
+  strains: string[];
+  themes: string[];
+  metrics: Metrics;
+  htmlSummary: string;
 };
+
+function parseJsonArray(value: any): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter((x) => typeof x === "string");
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((x) => typeof x === "string");
+      }
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function parseMetrics(value: any): Metrics {
+  if (!value) return {};
+  if (typeof value === "object" && !Array.isArray(value)) return value as Metrics;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === "object") return parsed as Metrics;
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
 
 export default async function SummaryPage() {
   const user = await getUser();
@@ -37,7 +74,6 @@ export default async function SummaryPage() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  // Pull from daily_summaries for this user
   const { data: raw, error } = await supabase
     .from("daily_summaries")
     .select("*")
@@ -50,19 +86,27 @@ export default async function SummaryPage() {
 
   const summaries: SummaryRow[] =
     raw?.map((row: any) => {
-      const modeRaw = (row.Mode ?? "pm").toString().toLowerCase();
+      const modeRaw = (row.Mode ?? row.mode ?? "pm").toString().toLowerCase();
       const mode: "am" | "pm" = modeRaw === "am" ? "am" : "pm";
+
+      const wins = parseJsonArray(row.wins ?? row.Wins);
+      const strains = parseJsonArray(row.strains ?? row.Strains);
+      const themes = parseJsonArray(row.themes ?? row.Themes);
+      const metrics = parseMetrics(row.metrics ?? row.Metrics);
 
       return {
         id: row.id ?? `${row.Date}-${mode}`,
         date: row.Date, // assuming YYYY-MM-DD or ISO-ish
         mode,
-        reflection: row["Reflection Summary"] ?? "",
-        actionEmailsReceived: row["Action Emails Received"] ?? null,
-        actionEmailsResolved: row["Action Emails Resolved"] ?? null,
-        emailsReceived: row["Emails Received"] ?? null,
-        emailsSent: row["Emails Sent"] ?? null,
-        meetings: row["Meetings"] ?? null,
+        reflection:
+          row.reflection ??
+          row["Reflection Summary"] ??
+          "",
+        wins,
+        strains,
+        themes,
+        metrics,
+        htmlSummary: row.html_summary ?? row.htmlSummary ?? "",
       };
     }) ?? [];
 
@@ -70,12 +114,10 @@ export default async function SummaryPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-16 space-y-14">
-      {/* Eyebrow Label */}
       <p className="text-[11px] font-semibold tracking-[0.28em] text-slate-300/90">
         ECHO · DAILY SUMMARIES
       </p>
 
-      {/* Hero Block */}
       <div className="space-y-4">
         <h1
           className="
@@ -107,7 +149,6 @@ export default async function SummaryPage() {
         </p>
       </div>
 
-      {/* Shell with bands + drawer */}
       <SummaryShell summaries={summaries} />
     </div>
   );

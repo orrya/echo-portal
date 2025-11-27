@@ -1,13 +1,17 @@
 import { getUser } from "@/lib/getUser";
 import { cookies } from "next/headers";
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
-import DashboardSubscription from "./dashboard-subscription"; // <-- client trigger
+import DashboardSubscription from "./dashboard-subscription";
 import { Zap, Mail, Bell } from "lucide-react";
 
 // -------- TYPES --------
 type DailySummaryRow = {
   Date: string;
   Mode?: string | null;
+  reflection?: string | null;
+  wins?: any;
+  themes?: any;
+  metrics?: any;
 };
 
 type EmailRecordRow = {
@@ -19,8 +23,42 @@ type EmailRecordRow = {
   Summary?: string | null;
 };
 
+function parseJsonArray(value: any): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter((x) => typeof x === "string");
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((x) => typeof x === "string");
+      }
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function parseMetrics(value: any): {
+  emailsReceived?: number | null;
+  emailsSent?: number | null;
+  actionEmailsResolved?: number | null;
+  meetings?: number | null;
+} {
+  if (!value) return {};
+  if (typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === "object") return parsed;
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
 export default async function DashboardPage() {
-  // -------- AUTH --------
   const user = await getUser();
   if (!user) {
     return (
@@ -36,7 +74,6 @@ export default async function DashboardPage() {
     );
   }
 
-  // -------- SUPABASE (CORRECT RLS CLIENT) --------
   const cookieStore = cookies();
 
   const supabase = createServerComponentClient(
@@ -71,6 +108,11 @@ export default async function DashboardPage() {
   );
 
   const nextWindow = new Date().getHours() < 12 ? "8:00 AM" : "5:00 PM";
+
+  const latestSummary = summaryRows[0];
+  const latestThemes = latestSummary ? parseJsonArray(latestSummary.themes) : [];
+  const latestWins = latestSummary ? parseJsonArray(latestSummary.wins) : [];
+  const latestMetrics = latestSummary ? parseMetrics(latestSummary.metrics) : {};
 
   // -------- EMAIL BANDS --------
   const { data: emailsRaw } = await supabase
@@ -128,7 +170,7 @@ export default async function DashboardPage() {
   // -------- RENDER --------
   return (
     <>
-      <DashboardSubscription /> {/* <-- subscription trigger */}
+      <DashboardSubscription />
 
       <div className="mx-auto max-w-6xl px-6 py-10 space-y-10">
         {/* Eyebrow + hero */}
@@ -250,14 +292,66 @@ export default async function DashboardPage() {
                   <span className="text-slate-100/95">{nextWindow}</span>
                 </div>
 
+                {latestThemes.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <span className="text-[11px] text-slate-400/90">
+                      Today’s themes
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {latestThemes.slice(0, 3).map((t) => (
+                        <span
+                          key={t}
+                          className="
+                            rounded-full border border-sky-400/60
+                            bg-sky-500/10 px-2.5 py-0.5
+                            text-[11px] text-sky-100
+                          "
+                        >
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {latestWins.length > 0 && (
+                  <p className="text-[11px] text-slate-400/90 pt-1">
+                    Echo’s highlight:{" "}
+                    <span className="text-slate-100">
+                      {latestWins[0]}
+                    </span>
+                  </p>
+                )}
+
+                {Object.keys(latestMetrics).length > 0 && (
+                  <div className="pt-1 flex flex-wrap gap-2 text-[11px] text-slate-200/90">
+                    {latestMetrics.emailsReceived != null && (
+                      <span className="rounded-full border border-slate-600/70 bg-slate-950/70 px-2.5 py-0.5">
+                        {latestMetrics.emailsReceived} emails
+                      </span>
+                    )}
+                    {latestMetrics.emailsSent != null && (
+                      <span className="rounded-full border border-slate-600/70 bg-slate-950/70 px-2.5 py-0.5">
+                        {latestMetrics.emailsSent} sent
+                      </span>
+                    )}
+                    {latestMetrics.meetings != null && (
+                      <span className="rounded-full border border-slate-600/70 bg-slate-950/70 px-2.5 py-0.5">
+                        {latestMetrics.meetings} meetings
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 <p className="pt-1 text-[11px] text-slate-400/85">
-                  Echo generates summaries twice a day using your real email activity.
+                  Echo generates summaries twice a day using your real email
+                  activity.
                 </p>
               </div>
             </div>
           </div>
 
-          {/* EMAIL INTELLIGENCE */}
+          {/* EMAIL INTELLIGENCE – unchanged core layout, kept for brevity */}
           <div
             className="
             relative overflow-hidden rounded-2xl backdrop-blur-2xl
@@ -278,8 +372,8 @@ export default async function DashboardPage() {
               </h2>
 
               <p className="text-sm text-slate-200/90">
-                Echo classifies messages into action, follow-up, and noise — only counting
-                threads that still need attention.
+                Echo classifies messages into action, follow-up, and noise — only
+                counting threads that still need attention.
               </p>
 
               <div className="mt-4 grid gap-2 text-sm text-slate-200/95">
@@ -314,7 +408,7 @@ export default async function DashboardPage() {
                 </div>
               </div>
 
-              {/* KEY EMAIL */}
+              {/* KEY EMAIL – unchanged */}
               <div className="mt-5 rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-xs sm:text-[13px] text-slate-200/95">
                 <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400/85 mb-1.5">
                   Today&apos;s key email
@@ -351,7 +445,6 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* FOOTER */}
         <div className="pt-4 text-center text-[11px] text-slate-400/80">
           Designed by Orrya · The Quiet Intelligence Layer.
         </div>

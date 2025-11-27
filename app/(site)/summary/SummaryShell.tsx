@@ -1,21 +1,12 @@
-// app/(site)/summary/SummaryShell.tsx
 "use client";
 
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import type { SummaryRow } from "./page";
+import SummaryModal from "../summary/SummaryModal";
+import MetricPills from "../summary/MetricPills";
 
-type Summary = {
-  id: string;
-  date: string;
-  mode: "am" | "pm";
-  reflection: string;
-  actionEmailsReceived: number | null;
-  actionEmailsResolved: number | null;
-  emailsReceived: number | null;
-  emailsSent: number | null;
-  meetings: number | null;
-};
-
+type Summary = SummaryRow;
 type BandKey = "all" | "am" | "pm";
 
 interface Props {
@@ -37,23 +28,9 @@ function labelForMode(mode: "am" | "pm") {
   return mode === "am" ? "Morning" : "Evening";
 }
 
-function metricsPills(s: Summary) {
-  const pills: string[] = [];
-
-  if (s.actionEmailsReceived != null)
-    pills.push(`${s.actionEmailsReceived} action emails`);
-  if (s.actionEmailsResolved != null)
-    pills.push(`${s.actionEmailsResolved} resolved`);
-  if (s.emailsReceived != null)
-    pills.push(`${s.emailsReceived} received`);
-  if (s.emailsSent != null) pills.push(`${s.emailsSent} sent`);
-  if (s.meetings != null) pills.push(`${s.meetings} meetings`);
-
-  return pills;
-}
-
 export default function SummaryShell({ summaries }: Props) {
   const [selectedBand, setSelectedBand] = useState<BandKey | null>(null);
+  const [activeSummary, setActiveSummary] = useState<Summary | null>(null);
 
   const todayStr = useMemo(() => {
     const d = new Date();
@@ -78,7 +55,6 @@ export default function SummaryShell({ summaries }: Props) {
   );
 
   const pmForCard = useMemo(() => {
-    // Today first, otherwise yesterday / most recent PM
     const todayPm = pmSummaries.find(
       (s) => s.date && s.date.toString().slice(0, 10) === todayStr
     );
@@ -104,6 +80,18 @@ export default function SummaryShell({ summaries }: Props) {
     return "";
   };
 
+  const previewTheme = (s?: Summary) =>
+    s && s.themes && s.themes.length > 0 ? s.themes[0] : "No theme yet";
+
+  const previewMetrics = (s?: Summary) => {
+    if (!s) return "";
+    const m = s.metrics || {};
+    const parts: string[] = [];
+    if (m.emailsReceived != null) parts.push(`${m.emailsReceived} emails`);
+    if (m.meetings != null) parts.push(`${m.meetings} meetings`);
+    return parts.join(" · ");
+  };
+
   return (
     <div className="space-y-10">
       {/* Band cards */}
@@ -120,27 +108,49 @@ export default function SummaryShell({ summaries }: Props) {
             border-[1.5px] border-transparent
             [border-image:linear-gradient(125deg,rgba(244,114,182,0.65),rgba(56,189,248,0.65))1]
             shadow-[0_20px_70px_rgba(0,0,0,0.7),0_0_22px_rgba(255,255,255,0.04)]
-            bg-[linear-gradient(to_bottom,rgba(255,255,255,0.06),rgba(10,16,32,0.5))]
-            transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-[0_26px_80px_rgba(0,0,0,0.8)]
+            bg-[radial-gradient(circle_at_top,rgba(248,113,190,0.22),transparent_55%),linear-gradient(to_bottom,rgba(255,255,255,0.06),rgba(10,16,32,0.5))]
+            transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_26px_80px_rgba(0,0,0,0.8)]
             outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400/70
             ${selectedBand === "am" ? "ring-2 ring-fuchsia-400/80" : ""}
           `}
         >
           <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(0,0,0,0.55)]" />
-          <div className="relative space-y-3">
-            <p className="text-[11px] tracking-[0.22em] text-slate-300/75 font-semibold">
-              MORNING SNAPSHOT
-            </p>
-            <h2 className="text-xl sm:text-2xl font-semibold text-white">
-              AM Summary
-            </h2>
+          <div className="relative space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-2">
+                <p className="text-[11px] tracking-[0.22em] text-slate-300/75 font-semibold">
+                  MORNING SNAPSHOT
+                </p>
+                <h2 className="text-xl sm:text-2xl font-semibold text-white">
+                  AM Summary
+                </h2>
+              </div>
+              {latestAmToday && (
+                <span className="rounded-full border border-white/15 bg-slate-900/50 px-2.5 py-1 text-[10px] text-slate-200/90">
+                  Today captured
+                </span>
+              )}
+            </div>
+
             <p className="text-sm text-slate-200/95 leading-relaxed line-clamp-3">
               {latestAmToday
                 ? latestAmToday.reflection ||
                   "Echo captured this morning, tap to revisit."
                 : "When Echo starts writing morning summaries, they’ll land here."}
             </p>
-            <p className="mt-3 text-[11px] text-slate-400/85">
+
+            <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-300/90">
+              <span className="rounded-full border border-slate-500/60 bg-slate-900/60 px-2.5 py-0.5">
+                Theme · {previewTheme(latestAmToday)}
+              </span>
+              {latestAmToday && (
+                <span className="rounded-full border border-slate-500/50 bg-slate-950/50 px-2.5 py-0.5">
+                  {previewMetrics(latestAmToday) || "Quiet morning"}
+                </span>
+              )}
+            </div>
+
+            <p className="mt-1 text-[11px] text-slate-400/85">
               Tap to open today’s AM summaries log.
             </p>
           </div>
@@ -158,27 +168,49 @@ export default function SummaryShell({ summaries }: Props) {
             border-[1.5px] border-transparent
             [border-image:linear-gradient(125deg,rgba(168,85,247,0.65),rgba(56,189,248,0.65))1]
             shadow-[0_20px_70px_rgba(0,0,0,0.7),0_0_22px_rgba(255,255,255,0.04)]
-            bg-[linear-gradient(to_bottom,rgba(255,255,255,0.06),rgba(10,16,32,0.5))]
-            transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-[0_26px_80px_rgba(0,0,0,0.8)]
+            bg-[radial-gradient(circle_at_top,rgba(129,140,248,0.23),transparent_55%),linear-gradient(to_bottom,rgba(255,255,255,0.06),rgba(10,16,32,0.5))]
+            transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_26px_80px_rgba(0,0,0,0.8)]
             outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70
             ${selectedBand === "pm" ? "ring-2 ring-violet-400/80" : ""}
           `}
         >
           <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(0,0,0,0.55)]" />
-          <div className="relative space-y-3">
-            <p className="text-[11px] tracking-[0.22em] text-slate-300/75 font-semibold">
-              EVENING SNAPSHOT
-            </p>
-            <h2 className="text-xl sm:text-2xl font-semibold text-white">
-              PM Summary
-            </h2>
+          <div className="relative space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-2">
+                <p className="text-[11px] tracking-[0.22em] text-slate-300/75 font-semibold">
+                  EVENING SNAPSHOT
+                </p>
+                <h2 className="text-xl sm:text-2xl font-semibold text-white">
+                  PM Summary
+                </h2>
+              </div>
+              {pmForCard && (
+                <span className="rounded-full border border-white/15 bg-slate-900/50 px-2.5 py-1 text-[10px] text-slate-200/90">
+                  Latest reflection
+                </span>
+              )}
+            </div>
+
             <p className="text-sm text-slate-200/95 leading-relaxed line-clamp-3">
               {pmForCard
                 ? pmForCard.reflection ||
                   "Echo wrapped this evening, tap to revisit."
                 : "Once Echo closes out your days, your PM reflections will appear here."}
             </p>
-            <p className="mt-3 text-[11px] text-slate-400/85">
+
+            <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-300/90">
+              <span className="rounded-full border border-slate-500/60 bg-slate-900/60 px-2.5 py-0.5">
+                Theme · {previewTheme(pmForCard)}
+              </span>
+              {pmForCard && (
+                <span className="rounded-full border border-slate-500/50 bg-slate-950/50 px-2.5 py-0.5">
+                  {previewMetrics(pmForCard) || "Quiet evening"}
+                </span>
+              )}
+            </div>
+
+            <p className="mt-1 text-[11px] text-slate-400/85">
               Tap to open recent PM summaries (today & yesterday).
             </p>
           </div>
@@ -196,14 +228,14 @@ export default function SummaryShell({ summaries }: Props) {
             border-[1.5px] border-transparent
             [border-image:linear-gradient(135deg,rgba(148,163,184,0.7),rgba(56,189,248,0.7))1]
             shadow-[0_20px_70px_rgba(0,0,0,0.7),0_0_22px_rgba(255,255,255,0.04)]
-            bg-[linear-gradient(to_bottom,rgba(255,255,255,0.06),rgba(10,16,32,0.5))]
-            transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-[0_26px_80px_rgba(0,0,0,0.8)]
+            bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.22),transparent_55%),linear-gradient(to_bottom,rgba(255,255,255,0.06),rgba(10,16,32,0.5))]
+            transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_26px_80px_rgba(0,0,0,0.8)]
             outline-none focus-visible:ring-2 focus-visible:ring-sky-300/70
             ${selectedBand === "all" ? "ring-2 ring-sky-300/80" : ""}
           `}
         >
           <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(0,0,0,0.55)]" />
-          <div className="relative space-y-3">
+          <div className="relative space-y-4">
             <p className="text-[11px] tracking-[0.22em] text-slate-300/75 font-semibold">
               QUIET ARCHIVE
             </p>
@@ -215,14 +247,27 @@ export default function SummaryShell({ summaries }: Props) {
                 ? `Scroll back through every AM/PM recap Echo has written – a calm log of your trajectory.`
                 : "Once Echo has a few days under its belt, this becomes your personal work history."}
             </p>
-            <p className="mt-3 text-[11px] text-slate-400/85">
+            {latestAny && (
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300/90">
+                <span className="rounded-full border border-slate-500/60 bg-slate-900/60 px-2.5 py-0.5">
+                  Latest · {formatDate(latestAny.date)} ·{" "}
+                  {labelForMode(latestAny.mode)}
+                </span>
+                {latestAny.themes?.length > 0 && (
+                  <span className="rounded-full border border-slate-500/50 bg-slate-950/50 px-2.5 py-0.5">
+                    Theme · {latestAny.themes[0]}
+                  </span>
+                )}
+              </div>
+            )}
+            <p className="mt-1 text-[11px] text-slate-400/85">
               Tap to open the full Echo archive.
             </p>
           </div>
         </button>
       </div>
 
-      {/* Drawer */}
+      {/* Drawer-like panel */}
       <AnimatePresence initial={false}>
         {selectedBand && (
           <motion.div
@@ -243,8 +288,8 @@ export default function SummaryShell({ summaries }: Props) {
                   {bandLabel(selectedBand)}
                 </p>
                 <p className="text-xs text-slate-400/90 mt-1">
-                  Echo keeps a running log of your days. Tap a line to skim the
-                  reflection and metrics.
+                  Echo keeps a running log of your days. Tap a line to open the
+                  full reflection, metrics and email summary.
                 </p>
               </div>
               <span className="rounded-full bg-slate-800/80 px-3 py-1 text-[11px] text-slate-300/90 border border-white/10">
@@ -260,15 +305,29 @@ export default function SummaryShell({ summaries }: Props) {
             ) : (
               <div className="space-y-4">
                 {currentSummaries.map((summary) => {
-                  const pills = metricsPills(summary);
+                  const m = summary.metrics || {};
+                  const pills: string[] = [];
+
+                  if (m.emailsReceived != null)
+                    pills.push(`${m.emailsReceived} emails`);
+                  if (m.emailsSent != null)
+                    pills.push(`${m.emailsSent} sent`);
+                  if (m.actionEmailsResolved != null)
+                    pills.push(`${m.actionEmailsResolved} resolved`);
+                  if (m.meetings != null)
+                    pills.push(`${m.meetings} meetings`);
 
                   return (
-                    <div
+                    <button
                       key={summary.id}
+                      type="button"
+                      onClick={() => setActiveSummary(summary)}
                       className="
+                        w-full text-left
                         relative overflow-hidden rounded-2xl border border-white/10
                         bg-slate-950/70 px-4 py-4 sm:px-5 sm:py-4
                         shadow-[0_18px_55px_rgba(0,0,0,0.7)]
+                        transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-[0_22px_70px_rgba(0,0,0,0.8)]
                       "
                     >
                       <div className="relative flex flex-col gap-2">
@@ -284,29 +343,51 @@ export default function SummaryShell({ summaries }: Props) {
                           </span>
                         </div>
 
-                        <p className="text-sm text-slate-200/90 leading-relaxed whitespace-pre-line line-clamp-4">
+                        <p className="text-sm text-slate-200/90 leading-relaxed whitespace-pre-line line-clamp-3">
                           {summary.reflection ||
                             "Echo captured this day for you – reflection coming soon."}
                         </p>
 
-                        {pills.length > 0 && (
-                          <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-300/90">
-                            {pills.map((pill) => (
-                              <span
-                                key={pill}
-                                className="
-                                  rounded-full border border-slate-600/80
-                                  px-2.5 py-0.5
-                                  bg-slate-900/70
-                                "
-                              >
-                                {pill}
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                        <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-300/90">
+                          {pills.map((pill) => (
+                            <span
+                              key={pill}
+                              className="
+                                rounded-full border border-slate-600/80
+                                px-2.5 py-0.5
+                                bg-slate-900/70
+                              "
+                            >
+                              {pill}
+                            </span>
+                          ))}
+
+                          {summary.themes?.length > 0 && (
+                            <span
+                              className="
+                                rounded-full border border-sky-500/70
+                                px-2.5 py-0.5
+                                bg-sky-500/10 text-sky-100
+                              "
+                            >
+                              Theme · {summary.themes[0]}
+                            </span>
+                          )}
+
+                          {summary.wins?.length > 0 && (
+                            <span
+                              className="
+                                rounded-full border border-emerald-500/70
+                                px-2.5 py-0.5
+                                bg-emerald-500/10 text-emerald-100
+                              "
+                            >
+                              {summary.wins.length} wins
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -315,16 +396,22 @@ export default function SummaryShell({ summaries }: Props) {
         )}
       </AnimatePresence>
 
-      {/* Placeholder when nothing selected */}
       {!selectedBand && (
         <div className="signal-card mt-2 border border-white/10 p-6 text-sm text-slate-300/95 rounded-2xl bg-slate-900/40 backdrop-blur-xl">
           Echo keeps a quiet AM / PM log for you. Tap{" "}
           <span className="font-semibold text-sky-300">AM</span>,{" "}
           <span className="font-semibold text-violet-300">PM</span> or{" "}
           <span className="font-semibold text-slate-200">All summaries</span>{" "}
-          above to slide open the archive.
+          above to slide open the archive. Tap any line to see the full
+          reflection, metrics and email summary.
         </div>
       )}
+
+      {/* Modal with full detail */}
+      <SummaryModal
+        summary={activeSummary}
+        onClose={() => setActiveSummary(null)}
+      />
     </div>
   );
 }
