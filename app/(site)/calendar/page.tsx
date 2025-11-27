@@ -1,10 +1,8 @@
 import React from "react";
 
 async function getCalendarSnapshot() {
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_BASE_URL}/api/calendar/today`,
-    { cache: "no-store" }
-  );
+  // FIXED: Safe relative API route
+  const res = await fetch("/api/calendar/today", { cache: "no-store" });
 
   if (!res.ok) return null;
 
@@ -23,7 +21,6 @@ export default async function CalendarPage() {
     );
   }
 
-  // ---- Extract data ----
   const insights = snapshot.calendar_insights ?? {};
   const timeline = snapshot.day_timeline ?? [];
 
@@ -47,20 +44,23 @@ export default async function CalendarPage() {
 
       {/* METRICS BAR */}
       <div className="flex flex-wrap gap-3">
-
         <MetricChip label="Work Ability" value={`${workAbility}%`} />
         <MetricChip label="Meetings" value={meetingCount} />
-        <MetricChip label="Fragmentation" value={`${fragments} · ${lostMinutes} min lost`} />
+        <MetricChip
+          label="Fragmentation"
+          value={`${fragments} · ${lostMinutes} min lost`}
+        />
         <MetricChip
           label="Context Switches"
-          value={`${insights.contextSwitches ?? 0} · ${insights.contextSwitchCost ?? 0} min`}
+          value={`${insights.contextSwitches ?? 0} · ${
+            insights.contextSwitchCost ?? 0
+          } min`}
         />
-
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
 
-        {/* LEFT COLUMN — DAY FRAME / TIMELINE */}
+        {/* LEFT COLUMN — TIMELINE */}
         <div>
           <h2 className="uppercase tracking-wide text-sm text-indigo-300 mb-2">
             Day Frame
@@ -82,7 +82,6 @@ export default async function CalendarPage() {
 
         {/* RIGHT COLUMN — DEEP WORK + NOISE */}
         <div>
-          {/* Deep Work */}
           <h2 className="uppercase tracking-wide text-sm text-indigo-300 mb-2">
             Deep Work Windows
           </h2>
@@ -92,12 +91,14 @@ export default async function CalendarPage() {
               <DeepWorkCard key={i} window={w} />
             ))}
 
-            {(!insights.deepWorkWindows || insights.deepWorkWindows.length === 0) && (
-              <p className="text-slate-500 text-sm">No protected focus windows today.</p>
+            {(!insights.deepWorkWindows ||
+              insights.deepWorkWindows.length === 0) && (
+              <p className="text-slate-500 text-sm">
+                No protected focus windows today.
+              </p>
             )}
           </div>
 
-          {/* Noise */}
           <h2 className="uppercase tracking-wide text-sm text-indigo-300 mt-8 mb-2">
             Noise & Follow-Up Risk
           </h2>
@@ -142,9 +143,7 @@ function MeetingCard({ meeting }: { meeting: any }) {
       : "border-green-500 bg-green-900/20";
 
   return (
-    <div
-      className={`p-4 rounded-xl border ${noiseColor} backdrop-blur-sm`}
-    >
+    <div className={`p-4 rounded-xl border ${noiseColor} backdrop-blur-sm`}>
       <div className="flex justify-between">
         <div className="text-slate-100 font-medium">{meeting.title}</div>
         <div className="text-xs text-slate-400 uppercase tracking-wide">
@@ -153,7 +152,8 @@ function MeetingCard({ meeting }: { meeting: any }) {
       </div>
 
       <div className="text-sm text-slate-400 mt-1">
-        {formatTime(meeting.start)} — {formatTime(meeting.end)} · {meeting.minutes} mins
+        {formatTime(meeting.start)} — {formatTime(meeting.end)} ·{" "}
+        {meeting.minutes} mins
       </div>
 
       <div className="flex items-center gap-3 mt-2">
