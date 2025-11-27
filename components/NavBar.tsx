@@ -17,6 +17,7 @@ const navItems = [
   { name: "Emails", href: "/email", icon: Mail },
   { name: "Summaries", href: "/summary", icon: Calendar },
   { name: "Settings", href: "/settings", icon: SettingsIcon },
+  { name: "Calendar", href: "/calendar", icon: Calendar },
 ];
 
 export default function NavBar() {
