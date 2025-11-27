@@ -16,8 +16,8 @@ const navItems = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
   { name: "Emails", href: "/email", icon: Mail },
   { name: "Summaries", href: "/summary", icon: Calendar },
+  { name: "Calendar", href: "/calendar", icon: Calendar }, // ← NEW
   { name: "Settings", href: "/settings", icon: SettingsIcon },
-  { name: "Calendar", href: "/calendar", icon: Calendar },
 ];
 
 export default function NavBar() {
