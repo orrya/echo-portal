@@ -32,6 +32,10 @@ type CalendarInsights = {
 
 type Snapshot = {
   date: string;
+  // API shape (camelCase)
+  calendarInsights?: CalendarInsights | null;
+  dayTimeline?: TimelineItem[] | null;
+  // Fallback if you ever read straight from DB in future (snake_case)
   calendar_insights?: CalendarInsights | null;
   day_timeline?: TimelineItem[] | null;
 };
@@ -41,7 +45,14 @@ export default function CalendarClient({ snapshot }: { snapshot: Snapshot | null
     null
   );
 
-  if (!snapshot || !snapshot.calendar_insights) {
+  // Accept either camelCase or snake_case from the API
+  const rawInsights =
+    snapshot?.calendarInsights ?? snapshot?.calendar_insights ?? null;
+
+  const timeline: TimelineItem[] =
+    snapshot?.dayTimeline ?? snapshot?.day_timeline ?? [];
+
+  if (!snapshot || !rawInsights) {
     return (
       <div className="mx-auto max-w-6xl px-6 py-16 text-slate-300">
         No calendar insights found for today.
@@ -49,8 +60,7 @@ export default function CalendarClient({ snapshot }: { snapshot: Snapshot | null
     );
   }
 
-  const insights = snapshot.calendar_insights;
-  const timeline: TimelineItem[] = snapshot.day_timeline ?? [];
+  const insights = rawInsights;
 
   const workAbility = insights.workAbility ?? 0;
   const meetingCount = insights.meetingCount ?? 0;
