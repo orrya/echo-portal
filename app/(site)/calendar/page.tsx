@@ -1,27 +1,25 @@
-// app/(site)/calendar/page.tsx
 import CalendarClient from "./CalendarClient";
 
-async function getCalendarSnapshot() {
-  // Use absolute URL so it works on Vercel
-  const baseUrl =
-    process.env.NEXT_PUBLIC_BASE_URL ||
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    "http://localhost:3000";
-
-  const res = await fetch(`${baseUrl}/api/calendar/today`, {
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    console.error("Failed to load calendar snapshot");
-    return null;
-  }
-
-  const { snapshot } = await res.json();
-  return snapshot ?? null;
-}
-
 export default async function CalendarPage() {
-  const snapshot = await getCalendarSnapshot();
-  return <CalendarClient snapshot={snapshot} />;
+  const todayRes = await fetch(
+    `${process.env.NEXT_PUBLIC_SITE_URL}/api/calendar/today`,
+    { cache: "no-store" }
+  );
+
+  const tomorrowRes = await fetch(
+    `${process.env.NEXT_PUBLIC_SITE_URL}/api/calendar/tomorrow`,
+    { cache: "no-store" }
+  );
+
+  const { snapshot: todaySnapshot } = await todayRes.json();
+  const { snapshot: tomorrowSnapshot } = await tomorrowRes.json();
+
+  return (
+    <div className="min-h-screen bg-slate-950 pb-20">
+      <CalendarClient
+        snapshot={todaySnapshot}
+        tomorrowSnapshot={tomorrowSnapshot}
+      />
+    </div>
+  );
 }

@@ -2,6 +2,10 @@
 
 import React, { useState } from "react";
 
+/* ---------------------------------------------------------
+   TYPES
+--------------------------------------------------------- */
+
 type DeepWorkWindow = {
   start: string;
   end: string;
@@ -36,16 +40,29 @@ type Snapshot = {
   dayTimeline?: TimelineItem[] | null;
   calendar_insights?: CalendarInsights | null;
   day_timeline?: TimelineItem[] | null;
+
+  // Tomorrow-specific
+  flaggedMeetings?: any[];
+  deepWorkWindows?: any[];
+  forecast?: any;
+  aiStory?: string;
 };
 
 export default function CalendarClient({
   snapshot,
+  tomorrowSnapshot,
 }: {
   snapshot: Snapshot | null;
+  tomorrowSnapshot: Snapshot | null;
 }) {
-  const [selectedMeeting, setSelectedMeeting] =
-    useState<TimelineItem | null>(null);
+  const [selectedMeeting, setSelectedMeeting] = useState<TimelineItem | null>(
+    null
+  );
   const [defendLoadingKey, setDefendLoadingKey] = useState<string | null>(null);
+
+  /* ---------------------------------------------------------
+     TODAY SNAPSHOT (your existing logic)
+  --------------------------------------------------------- */
 
   const rawInsights =
     snapshot?.calendarInsights ?? snapshot?.calendar_insights ?? null;
@@ -91,10 +108,18 @@ export default function CalendarClient({
 
   const showBreakHint = meetingMinutes >= 120 && deepWork.length > 0;
 
-  // ---------- “Meetings That Should Not Exist” logic ----------
-  const flaggedMeetings = timeline.filter((m) => shouldFlagMeeting(m, deepWork));
+  /* ---------------------------------------------------------
+     HELPER: FLAG MEETINGS THAT SHOULD NOT EXIST
+  --------------------------------------------------------- */
 
-  // ---------- defend this block handler ----------
+  const flaggedMeetings = timeline.filter((m) =>
+    shouldFlagMeeting(m, deepWork)
+  );
+
+  /* ---------------------------------------------------------
+     DEFEND BLOCK HANDLER
+  --------------------------------------------------------- */
+
   async function handleDefendBlock(window: DeepWorkWindow) {
     const key = `${window.start}-${window.end}`;
     try {
@@ -107,29 +132,35 @@ export default function CalendarClient({
           start: window.start,
           end: window.end,
           title: "Deep Work — Protected",
-          userEmail: null, // n8n can ignore this, credentials are stored there
         }),
       });
 
-      const json = await res.json().catch(() => ({} as any));
+      const json = await res.json().catch(() => ({}));
 
       if (!res.ok || json.status === "error") {
-        alert("Echo couldn’t protect this block just now. Please try again.");
+        alert("Echo couldn’t protect this block. Try again.");
         return;
       }
 
-      alert("This deep-work block has been protected in your Outlook calendar.");
+      alert("Deep work window protected in Outlook.");
     } catch (err) {
-      console.error("Defend block error:", err);
-      alert("Something went wrong while protecting this block.");
+      console.error(err);
+      alert("Something went wrong.");
     } finally {
       setDefendLoadingKey(null);
     }
   }
 
+  /* ---------------------------------------------------------
+     RENDER
+  --------------------------------------------------------- */
+
   return (
-    <div className="mx-auto max-w-6xl px-6 py-14 space-y-10">
-      {/* HEADER */}
+    <div className="mx-auto max-w-6xl px-6 py-14 space-y-16">
+
+      {/* -----------------------------------------------------
+         TODAY HEADER
+      ----------------------------------------------------- */}
       <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
         <div>
           <p className="text-[11px] font-semibold tracking-[0.28em] text-slate-300/90 uppercase">
@@ -169,20 +200,16 @@ export default function CalendarClient({
         </div>
       </header>
 
-      {/* 🔥 BLOCK 1 — TODAY’S WORK STORY */}
+      {/* -----------------------------------------------------
+         TODAY — WORK STORY
+      ----------------------------------------------------- */}
       <section className="rounded-3xl border border-slate-800 bg-slate-950/70 px-6 py-6 shadow-[0_0_40px_rgba(15,23,42,0.7)]">
         <h2 className="text-xs font-semibold tracking-[0.22em] text-slate-300/80 uppercase">
           Today’s work story
         </h2>
 
         <p className="mt-3 text-sm text-slate-300 leading-relaxed">
-          {workAbility > 75
-            ? "Today is steady and spacious, with healthy pockets of clarity to lean into."
-            : workAbility > 60
-            ? "The morning is a little fractured but the afternoon clears; focus remains workable."
-            : workAbility > 45
-            ? "The day is mixed — meetings and gaps are interleaved, so focus will need a bit of protection."
-            : "Today is structurally noisy with limited uninterrupted time — small, deliberate wins will matter most."}
+          {renderTodayWorkStory(workAbility)}
         </p>
 
         <p className="mt-2 text-sm text-slate-400">
@@ -190,37 +217,26 @@ export default function CalendarClient({
             ? `Your strongest deep-work block begins around ${formatTime(
                 deepWork[0].start
               )}.`
-            : "No clear deep-focus windows appear — Echo recommends manually protecting one block."}
+            : "No clear deep-focus windows — consider manually protecting a block."}
         </p>
       </section>
 
-      {/* METRICS BAR */}
+      {/* -----------------------------------------------------
+         TODAY — METRICS BAR
+      ----------------------------------------------------- */}
       <section className="flex flex-wrap gap-3">
-        <MetricChip
-          label="Focus capacity"
-          value={`${workAbility}%`}
-          subtitle={loadLabel}
-        />
-        <MetricChip
-          label="Time booked"
-          value={`${meetingCount} meetings`}
-          subtitle={`${meetingMinutes} min`}
-        />
-        <MetricChip
-          label="Day fractures"
-          value={fractures}
-          subtitle={`${fractureMinutes} min lost`}
-        />
-        <MetricChip
-          label="Switch cost"
-          value={switches}
-          subtitle={`${switchCost} min tax`}
-        />
+        <MetricChip label="Focus capacity" value={`${workAbility}%`} subtitle={loadLabel} />
+        <MetricChip label="Time booked" value={`${meetingCount} meetings`} subtitle={`${meetingMinutes} min`} />
+        <MetricChip label="Day fractures" value={fractures} subtitle={`${fractureMinutes} min lost`} />
+        <MetricChip label="Switch cost" value={switches} subtitle={`${switchCost} min tax`} />
       </section>
 
-      {/* MAIN GRID */}
+      {/* -----------------------------------------------------
+         TODAY — MAIN GRID
+      ----------------------------------------------------- */}
       <section className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1.1fr)] gap-10">
-        {/* LEFT: DAY FRAME */}
+        
+        {/* -------------------------- LEFT: DAY FRAME -------------------------- */}
         <div className="rounded-3xl border border-slate-800 bg-slate-950/70 px-6 py-5 shadow-[0_0_60px_rgba(15,23,42,0.9)]">
           <h2 className="text-xs font-semibold tracking-[0.22em] text-slate-300/80 uppercase">
             Day frame
@@ -231,9 +247,7 @@ export default function CalendarClient({
 
           <div className="mt-4 space-y-5">
             {timeline.length === 0 && (
-              <p className="text-sm text-slate-500">
-                No meetings in today’s calendar.
-              </p>
+              <p className="text-sm text-slate-500">No meetings today.</p>
             )}
 
             {timeline.map((m, idx) => (
@@ -249,23 +263,21 @@ export default function CalendarClient({
           </div>
         </div>
 
-        {/* RIGHT: DEEP WORK + NOISE */}
+        {/* -------------------------- RIGHT: DEEP WORK + NOISE -------------------------- */}
         <div className="space-y-6">
-          {/* Deep work */}
+
+          {/* Deep Work */}
           <div className="rounded-3xl border border-emerald-500/40 bg-emerald-900/10 px-5 py-5">
             <h2 className="text-xs font-semibold tracking-[0.22em] text-emerald-200 uppercase">
               Deep-work windows
             </h2>
             <p className="mt-1 text-xs text-emerald-100/80">
-              Echo identifies uninterrupted blocks so you can defend your best
-              work.
+              Echo identifies uninterrupted blocks so you can defend your best work.
             </p>
 
             <div className="mt-4 space-y-3">
               {deepWork.length === 0 && (
-                <p className="text-sm text-emerald-50/80">
-                  No uninterrupted focus windows detected today.
-                </p>
+                <p className="text-sm text-emerald-50/80">No deep-work windows today.</p>
               )}
 
               {deepWork.map((w, i) => {
@@ -280,14 +292,8 @@ export default function CalendarClient({
                       onClick={() => handleDefendBlock(w)}
                       disabled={isLoading}
                     >
-                      {isLoading
-                        ? "Defending this block…"
-                        : "Defend this block"}
+                      {isLoading ? "Defending this block…" : "Defend this block"}
                     </button>
-                    <p className="text-[11px] text-emerald-100/70">
-                      Echo blocks this time in your Outlook calendar so it stays
-                      protected for deep work.
-                    </p>
                   </div>
                 );
               })}
@@ -295,125 +301,231 @@ export default function CalendarClient({
 
             {showBreakHint && (
               <p className="mt-4 text-xs text-emerald-200">
-                🧘‍♂️ Recommended: take 10 minutes between blocks to reset
-                context.
+                🧘‍♂️ Recommended: take 10 minutes between blocks to reset context.
               </p>
             )}
           </div>
 
-          {/* Noise & follow-up */}
+          {/* Noise & Follow-Up */}
           <div className="rounded-3xl border border-slate-800 bg-slate-950/70 px-5 py-5">
-            <h2 className="text-xs font-semibold tracking-[0.22em] text-slate-300/80 uppercase">
-              Noise & follow-up risk
-            </h2>
-            <p className="mt-1 text-xs text-slate-400">
-              High-noise meetings tend to generate outsized follow-up and
-              attention drag.
-            </p>
 
             {/* Meetings That Should Not Exist */}
-            <div className="mt-6">
-              <h3 className="text-[11px] font-semibold tracking-[0.2em] uppercase text-red-300/80">
-                Meetings that should not exist (experimental)
-              </h3>
-              <p className="text-xs text-slate-400 mt-1">
-                Flagged where the cost (time, people, noise) outweighs the
-                likely value.
+            <h3 className="text-[11px] font-semibold tracking-[0.2em] uppercase text-red-300/80 mt-4">
+              Meetings that should not exist (experimental)
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Flagged where the structural cost outweighs the value.
+            </p>
+
+            {flaggedMeetings.length === 0 && (
+              <p className="text-sm text-slate-500 mt-2">
+                No low-value meetings today.
               </p>
+            )}
 
-              {flaggedMeetings.length === 0 && (
-                <p className="text-sm text-slate-500 mt-2">
-                  No meetings are clearly low-value today.
-                </p>
-              )}
+            <div className="mt-3 space-y-3">
+              {flaggedMeetings.map((m, i) => {
+                const reasons = getMeetingFlagReasons(m, deepWork);
 
-              <div className="mt-3 space-y-3">
-                {flaggedMeetings.map((m, i) => {
-                  const reasons = getMeetingFlagReasons(m, deepWork);
-
-                  return (
-                    <div
-                      key={`${m.start}-${i}`}
-                      className="rounded-xl border border-red-500/60 bg-red-900/20 px-4 py-3 text-sm text-red-50/90"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">
-                          {m.title || "Untitled meeting"}
-                        </span>
-                        <span className="text-[11px] uppercase tracking-[0.18em] text-red-200">
-                          Noise {m.noiseScore}
-                        </span>
-                      </div>
-                      <p className="text-xs mt-1 text-red-100/80">
-                        {formatTime(m.start)} · {m.minutes} min · {m.attendees}{" "}
-                        attendee(s)
-                      </p>
-
-                      <details className="mt-2 text-xs text-red-100/90">
-                        <summary className="cursor-pointer underline">
-                          Why Echo flagged this
-                        </summary>
-                        <ul className="mt-1 list-disc list-inside space-y-0.5">
-                          {reasons.map((r, idx) => (
-                            <li key={idx}>{r}</li>
-                          ))}
-                        </ul>
-                      </details>
+                return (
+                  <div
+                    key={`${m.start}-${i}`}
+                    className="rounded-xl border border-red-500/60 bg-red-900/20 px-4 py-3 text-sm text-red-50/90"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{m.title || "Untitled meeting"}</span>
+                      <span className="text-[11px] uppercase tracking-[0.18em] text-red-200">
+                        Noise {m.noiseScore}
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
 
-            {/* Follow-up heavy meetings (if any) */}
-            <div className="mt-6 space-y-3">
-              {followUp.length === 0 && (
-                <p className="text-sm text-slate-500">
-                  No obviously follow-up-heavy meetings detected.
-                </p>
-              )}
+                    <p className="text-xs mt-1 text-red-100/80">
+                      {formatTime(m.start)} · {m.minutes} min · {m.attendees} attendee(s)
+                    </p>
 
-              {followUp.map((m: any, i: number) => (
-                <div
-                  key={i}
-                  className="rounded-xl border border-red-500/60 bg-red-900/20 px-4 py-3 text-sm text-red-50/90"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">{m.title}</span>
-                    <span className="text-[11px] uppercase tracking-[0.18em] text-red-200">
-                      Noise {m.noiseScore}
-                    </span>
+                    <details className="mt-2 text-xs text-red-100/90">
+                      <summary className="cursor-pointer underline">
+                        Why Echo flagged this
+                      </summary>
+                      <ul className="mt-1 list-disc list-inside space-y-0.5">
+                        {reasons.map((r, idx) => (
+                          <li key={idx}>{r}</li>
+                        ))}
+                      </ul>
+                    </details>
                   </div>
-                  <p className="text-xs mt-1 text-red-100/80">
-                    {m.attendees?.length ?? 0} attendee(s) ·{" "}
-                    {formatTime(m.start)}
-                  </p>
-                </div>
-              ))}
+                );
+              })}
             </div>
+
+            {/* Follow-Up Heavy (existing behaviour) */}
+            {followUp.length > 0 && (
+              <>
+                <h3 className="text-xs tracking-[0.2em] uppercase text-red-300 mt-8">
+                  Follow-up heavy meetings
+                </h3>
+
+                {followUp.map((m: any, i: number) => (
+                  <div
+                    key={i}
+                    className="rounded-xl border border-red-500/60 bg-red-900/20 px-4 py-3 text-sm text-red-50/90"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{m.title}</span>
+                      <span className="text-[11px] uppercase tracking-[0.18em] text-red-200">
+                        Noise {m.noiseScore}
+                      </span>
+                    </div>
+
+                    <p className="text-xs mt-1 text-red-100/80">
+                      {m.attendees?.length ?? 0} attendee(s) · {formatTime(m.start)}
+                    </p>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         </div>
       </section>
 
-      {/* 🔥 BLOCK 3 — TOMORROW FORECAST (HEURISTIC FOR NOW) */}
+      {/* -----------------------------------------------------
+         HEURISTIC TOMORROW FORECAST (YOURS)
+      ----------------------------------------------------- */}
       <section className="rounded-3xl border border-sky-700/40 bg-sky-900/20 px-6 py-6 shadow-[0_0_40px_rgba(56,189,248,0.3)]">
         <h2 className="text-xs font-semibold tracking-[0.22em] text-sky-300 uppercase">
           Tomorrow’s forecast (experimental)
         </h2>
 
         <p className="mt-3 text-sm text-slate-300 leading-relaxed">
-          Based on today’s shape and recent patterns, Echo sketches a simple
-          forecast for tomorrow.
+          Based on today’s shape and recent patterns, Echo sketches a simple forecast.
         </p>
 
         {renderTomorrowForecast(workAbility, meetingCount)}
 
         <p className="mt-3 text-xs text-slate-400">
-          Full predictive scheduling will kick in once Outlook ingestion for
-          tomorrow&apos;s events is wired into this view.
+          Full predictive scheduling activates once Outlook ingestion is live.
         </p>
       </section>
 
+      {/* -----------------------------------------------------
+         🔮 FULL TOMORROW SNAPSHOT (REAL DATA FROM SUPABASE)
+      ----------------------------------------------------- */}
+
+      <section className="rounded-3xl border border-sky-800 bg-slate-900/60 px-6 py-10 shadow-[0_0_70px_rgba(14,165,233,0.3)]">
+        <h2 className="text-xs font-semibold tracking-[0.22em] text-sky-300 uppercase">
+          Tomorrow • {tomorrowSnapshot?.date || ""}
+        </h2>
+
+        {!tomorrowSnapshot && (
+          <p className="mt-4 text-sm text-slate-500">
+            Tomorrow’s calendar snapshot hasn’t been generated yet.
+          </p>
+        )}
+
+        {tomorrowSnapshot && (
+          <div className="space-y-10 mt-6">
+
+            {/* AI Story */}
+            <div>
+              <h3 className="text-sm font-semibold text-slate-200">Work story</h3>
+              <p className="mt-2 text-sm text-slate-300">
+                {tomorrowSnapshot.aiStory || "No narrative available."}
+              </p>
+            </div>
+
+            {/* Metrics */}
+            <div className="flex flex-wrap gap-3">
+              <MetricChip
+                label="Focus capacity"
+                value={`${tomorrowSnapshot.calendarInsights?.workAbility ?? 0}%`}
+              />
+              <MetricChip
+                label="Meetings"
+                value={`${tomorrowSnapshot.calendarInsights?.meetingCount ?? 0}`}
+                subtitle={`${tomorrowSnapshot.calendarInsights?.meetingLoadMinutes ?? 0} min`}
+              />
+              <MetricChip
+                label="Fragments"
+                value={`${tomorrowSnapshot.calendarInsights?.fragments ?? 0}`}
+                subtitle={`${tomorrowSnapshot.calendarInsights?.lostFragmentMinutes ?? 0} min lost`}
+              />
+            </div>
+
+            {/* Deep Work Windows */}
+            <div>
+              <h3 className="text-xs tracking-[0.18em] uppercase text-emerald-300">
+                Deep-work windows
+              </h3>
+
+              <div className="mt-3 space-y-3">
+                {tomorrowSnapshot.deepWorkWindows?.length === 0 && (
+                  <p className="text-sm text-slate-500">
+                    No deep-work windows tomorrow.
+                  </p>
+                )}
+
+                {tomorrowSnapshot.deepWorkWindows?.map((w: any, i: number) => (
+                  <DeepWorkCard key={i} window={w} />
+                ))}
+              </div>
+            </div>
+
+            {/* Flagged Meetings */}
+            <div>
+              <h3 className="text-xs tracking-[0.18em] uppercase text-red-300">
+                Meetings that should not exist
+              </h3>
+
+              {tomorrowSnapshot.flaggedMeetings?.length === 0 && (
+                <p className="text-sm text-slate-500 mt-2">
+                  No low-value meetings tomorrow.
+                </p>
+              )}
+
+              <div className="mt-3 space-y-3">
+                {tomorrowSnapshot.flaggedMeetings?.map((m: any, i: number) => (
+                  <div
+                    key={i}
+                    className="rounded-xl border border-red-500/60 bg-red-900/20 px-4 py-3"
+                  >
+                    <div className="flex justify-between">
+                      <span className="text-red-100">{m.title}</span>
+                      <span className="text-[11px] text-red-200 uppercase">
+                        Noise {m.noiseScore}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-red-200 mt-1">
+                      {m.minutes} min · {m.attendees} attendee(s)
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Tomorrow Timeline */}
+            <div>
+              <h3 className="text-xs tracking-[0.18em] uppercase text-slate-300">
+                Tomorrow’s timeline
+              </h3>
+
+              {tomorrowSnapshot.dayTimeline?.length === 0 && (
+                <p className="text-sm text-slate-500">No events tomorrow.</p>
+              )}
+
+              <div className="mt-3 space-y-4">
+                {tomorrowSnapshot.dayTimeline?.map((m: any, i: number) => (
+                  <MeetingRow key={i} meeting={m} />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* -----------------------------------------------------
+         MODAL
+      ----------------------------------------------------- */}
       {selectedMeeting && (
         <MeetingDetailModal
           meeting={selectedMeeting}
@@ -424,9 +536,9 @@ export default function CalendarClient({
   );
 }
 
-/* --------------------------------------------
-   HELPERS & SMALL COMPONENTS
---------------------------------------------- */
+/* ---------------------------------------------------------
+   COMPONENTS & HELPERS
+--------------------------------------------------------- */
 
 function MetricChip({
   label,
@@ -490,9 +602,7 @@ function MeetingRow({ meeting }: { meeting: TimelineItem }) {
         </div>
 
         <div className="flex flex-col items-center pt-2">
-          <span
-            className={`h-2 w-2 rounded-full ${dotColor} shadow-[0_0_10px_rgba(34,197,94,0.6)]`}
-          />
+          <span className={`h-2 w-2 rounded-full ${dotColor}`} />
         </div>
 
         <div className="flex-1">
@@ -598,106 +708,111 @@ function MeetingDetailModal({
 
         <p className="mt-4 text-xs text-slate-400">
           Echo uses noise score, attendees and timing to estimate follow-up and
-          attention drag for this meeting.
+          attention drag.
         </p>
       </div>
     </div>
   );
 }
 
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+/* ---------------------------------------------------------
+   FLAGGING LOGIC
+--------------------------------------------------------- */
 
-/* ---------- Flagging helpers ---------- */
-
-function shouldFlagMeeting(
-  meeting: TimelineItem,
-  deepWork: DeepWorkWindow[]
-): boolean {
+function shouldFlagMeeting(meeting: TimelineItem, deepWork: DeepWorkWindow[]) {
   const highNoise = (meeting.noiseScore ?? 0) >= 5;
   const tooManyAttendees = meeting.attendees >= 5;
   const veryShort = meeting.minutes <= 30;
-  const overlapsDeepWork = deepWorkOverlap(meeting, deepWork);
+  const overlapsDeep = deepWorkOverlap(meeting, deepWork);
 
-  // Simple heuristic: high noise OR (too many people + short) OR overlaps deep work
-  return highNoise || (tooManyAttendees && veryShort) || overlapsDeepWork;
+  return highNoise || (tooManyAttendees && veryShort) || overlapsDeep;
 }
 
 function getMeetingFlagReasons(
   meeting: TimelineItem,
   deepWork: DeepWorkWindow[]
-): string[] {
+) {
   const reasons: string[] = [];
 
-  if ((meeting.noiseScore ?? 0) >= 5) {
+  if ((meeting.noiseScore ?? 0) >= 5)
     reasons.push("High noise score for the time booked.");
-  }
 
-  if (meeting.attendees >= 5) {
-    reasons.push("Many attendees, raising the cost of the meeting.");
-  }
+  if (meeting.attendees >= 5)
+    reasons.push("Many attendees increase meeting cost.");
 
-  if (meeting.minutes <= 30) {
-    reasons.push("Very short slot, which often leads to rushed or unclear outcomes.");
-  }
+  if (meeting.minutes <= 30)
+    reasons.push("Very short slot — often produces unclear outcomes.");
 
-  if (deepWorkOverlap(meeting, deepWork)) {
-    reasons.push("Overlaps with one of your best deep-work windows.");
-  }
+  if (deepWorkOverlap(meeting, deepWork))
+    reasons.push("Overlaps with one of your deep-work windows.");
 
-  if (reasons.length === 0) {
-    reasons.push("Structure suggests limited clear value compared to its cost.");
-  }
+  if (reasons.length === 0)
+    reasons.push("Structure suggests limited value compared to cost.");
 
   return reasons;
 }
 
-function deepWorkOverlap(
-  meeting: TimelineItem,
-  deepWork: DeepWorkWindow[]
-): boolean {
-  const mStart = new Date(meeting.start).getTime();
-  const mEnd = new Date(meeting.end).getTime();
+function deepWorkOverlap(m: TimelineItem, deep: DeepWorkWindow[]) {
+  const mStart = new Date(m.start).getTime();
+  const mEnd = new Date(m.end).getTime();
 
-  return deepWork.some((w) => {
+  return deep.some((w) => {
     const wStart = new Date(w.start).getTime();
     const wEnd = new Date(w.end).getTime();
     return mStart < wEnd && mEnd > wStart;
   });
 }
 
-/* ---------- Tomorrow forecast helper ---------- */
+/* ---------------------------------------------------------
+   TODAY / TOMORROW RENDER HELPERS
+--------------------------------------------------------- */
+
+function renderTodayWorkStory(workAbility: number) {
+  if (workAbility > 75)
+    return "Today is steady and spacious, with healthy pockets of clarity to lean into.";
+
+  if (workAbility > 60)
+    return "The morning is a little fractured but the afternoon clears; focus remains workable.";
+
+  if (workAbility > 45)
+    return "The day is mixed — meetings and gaps are interleaved, so focus will need protection.";
+
+  return "Today is structurally noisy with limited uninterrupted time — small, deliberate wins matter most.";
+}
 
 function renderTomorrowForecast(workAbility: number, meetingCount: number) {
-  const projected =
-    meetingCount > 2 ? workAbility - 8 : workAbility + 6;
+  const projected = meetingCount > 2 ? workAbility - 8 : workAbility + 6;
   const clamped = Math.max(30, Math.min(90, projected));
 
-  const bestBlock =
-    meetingCount > 2 ? "morning is clearer" : "late morning and early afternoon look strongest";
+  const block =
+    meetingCount > 2
+      ? "morning is clearer"
+      : "late morning and early afternoon look strongest";
 
   return (
     <ul className="mt-3 space-y-2 text-sm text-slate-300">
       <li>
+        • <span className="text-sky-300 font-medium">{clamped}%</span> projected
+        focus capacity.
+      </li>
+      <li>• Your {block} for deep work.</li>
+      <li>
         •{" "}
-        <span className="text-sky-300 font-medium">
-          {clamped}%
-        </span>{" "}
-        projected focus capacity.
-      </li>
-      <li>
-        • Your {bestBlock} for deep work.
-      </li>
-      <li>
-        • Expect{" "}
         {meetingCount > 3
-          ? "a bit of drag from today’s meeting density."
-          : "a fairly clean reset if you close out loose ends."}
+          ? "Some drag expected from today’s density."
+          : "A fairly clean reset tomorrow."}
       </li>
     </ul>
   );
+}
+
+/* ---------------------------------------------------------
+   UTIL
+--------------------------------------------------------- */
+
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
