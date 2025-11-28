@@ -388,24 +388,7 @@ export default function CalendarClient({
         </div>
       </section>
 
-      {/* -----------------------------------------------------
-         HEURISTIC TOMORROW FORECAST (YOURS)
-      ----------------------------------------------------- */}
-      <section className="rounded-3xl border border-sky-700/40 bg-sky-900/20 px-6 py-6 shadow-[0_0_40px_rgba(56,189,248,0.3)]">
-        <h2 className="text-xs font-semibold tracking-[0.22em] text-sky-300 uppercase">
-          Tomorrow’s forecast (experimental)
-        </h2>
 
-        <p className="mt-3 text-sm text-slate-300 leading-relaxed">
-          Based on today’s shape and recent patterns, Echo sketches a simple forecast.
-        </p>
-
-        {renderTomorrowForecast(workAbility, meetingCount)}
-
-        <p className="mt-3 text-xs text-slate-400">
-          Full predictive scheduling activates once Outlook ingestion is live.
-        </p>
-      </section>
 
       {/* -----------------------------------------------------
          🔮 FULL TOMORROW SNAPSHOT (REAL DATA FROM SUPABASE)
