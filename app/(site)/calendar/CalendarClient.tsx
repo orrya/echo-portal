@@ -1,6 +1,3 @@
-// === CALENDAR CLIENT =====================================================================
-// Full file including premium Tomorrow Banner (Option 1 deep-card styling)
-
 "use client";
 
 import React, { useState } from "react";
@@ -44,7 +41,7 @@ type Snapshot = {
   calendar_insights?: CalendarInsights | null;
   day_timeline?: TimelineItem[] | null;
 
-  // Tomorrow data
+  // Tomorrow-specific (when used for tomorrowSnapshot)
   flaggedMeetings?: any[];
   deepWorkWindows?: any[];
   forecast?: any;
@@ -116,7 +113,7 @@ export default function CalendarClient({
   const showBreakHint = meetingMinutes >= 120 && deepWork.length > 0;
 
   /* ---------------------------------------------------------
-     HELPER: FLAG “MEETINGS THAT SHOULD NOT EXIST”
+     HELPER: FLAG MEETINGS THAT SHOULD NOT EXIST
   --------------------------------------------------------- */
 
   const flaggedMeetings = timeline.filter((m) =>
@@ -159,10 +156,10 @@ export default function CalendarClient({
   }
 
   /* ---------------------------------------------------------
-     PREMIUM TOMORROW BANNER (NEW)
+     PREMIUM TOMORROW BANNER (colour-coded)
   --------------------------------------------------------- */
 
-  const tomorrowDate = tomorrowSnapshot?.date
+  const tomorrowDateLabel = tomorrowSnapshot?.date
     ? new Date(tomorrowSnapshot.date).toLocaleDateString("en-GB", {
         weekday: "short",
         day: "2-digit",
@@ -173,9 +170,9 @@ export default function CalendarClient({
   const tomorrowAbility =
     tomorrowSnapshot?.calendarInsights?.workAbility ?? null;
 
-  const bannerGradient =
+  const tomorrowGradient =
     tomorrowAbility == null
-      ? "from-slate-700 to-slate-600"
+      ? "from-slate-700 via-slate-600 to-slate-700"
       : tomorrowAbility >= 80
       ? "from-emerald-400 via-emerald-300 to-emerald-500"
       : tomorrowAbility >= 60
@@ -190,53 +187,51 @@ export default function CalendarClient({
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-14 space-y-16">
-
       {/* -----------------------------------------------------
-         PREMIUM TOMORROW BANNER (APPLE-INTELLIGENCE INSPIRED)
+         TOMORROW BANNER (top of page, world-class UI)
       ----------------------------------------------------- */}
       {tomorrowSnapshot && (
-        <div className="rounded-3xl border border-slate-800 bg-slate-950/70 shadow-[0_0_60px_rgba(15,23,42,0.8)] relative overflow-hidden">
-
+        <section className="rounded-3xl border border-slate-800 bg-slate-950/80 shadow-[0_0_60px_rgba(15,23,42,0.8)] overflow-hidden">
           {/* Gradient strip */}
           <div
-            className={`
-              h-2 w-full rounded-t-3xl
-              bg-gradient-to-r ${bannerGradient}
-            `}
+            className={`h-1.5 w-full bg-gradient-to-r ${tomorrowGradient}`}
           />
 
-          <div className="px-6 py-5">
-            <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">
-              Tomorrow
-            </p>
-
-            <h3 className="mt-1 text-xl font-semibold text-white">
-              {tomorrowDate}
-            </h3>
-
-            <p className="mt-2 text-sm text-slate-300">
-              {tomorrowSnapshot.aiStory ||
-                "Echo is preparing tomorrow’s outlook."}
-            </p>
-
-            {tomorrowAbility != null && (
-              <p className="mt-2 text-xs text-slate-400">
-                Projected focus capacity:{" "}
-                <span className="text-sky-300 font-medium">
-                  {tomorrowAbility}%
-                </span>
+          <div className="px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">
+                Tomorrow
               </p>
-            )}
+              <h2 className="mt-1 text-sm sm:text-base font-semibold text-slate-50">
+                {tomorrowDateLabel ?? "Tomorrow’s workload"}
+              </h2>
+              <p className="mt-1.5 text-xs sm:text-sm text-slate-300 max-w-xl">
+                {tomorrowSnapshot.aiStory ||
+                  "Echo is preparing a quiet preview of tomorrow’s load so you can decide what to defend."}
+              </p>
+            </div>
+
+            <div className="flex flex-col items-start sm:items-end gap-1 text-xs">
+              {tomorrowAbility != null && (
+                <p className="text-slate-200">
+                  Focus capacity:{" "}
+                  <span className="font-semibold text-sky-300">
+                    {tomorrowAbility}%
+                  </span>
+                </p>
+              )}
+
+              <p className="text-[11px] text-slate-400">
+                Pulled from Echo’s forecast of your calendar for tomorrow.
+              </p>
+            </div>
           </div>
-        </div>
+        </section>
       )}
 
-      {/* ---------------------------------------------------------------------------------
-         (THE REST OF YOUR EXISTING TODAY + TOMORROW UI REMAINS UNCHANGED BELOW)
-         Everything else stays identical to the file you just had working perfectly.
-         --------------------------------------------------------------------------------- */}
-
-      {/* --- TODAY HEADER --- */}
+      {/* -----------------------------------------------------
+         TODAY HEADER
+      ----------------------------------------------------- */}
       <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
         <div>
           <p className="text-[11px] font-semibold tracking-[0.28em] text-slate-300/90 uppercase">
@@ -276,21 +271,525 @@ export default function CalendarClient({
         </div>
       </header>
 
-      {/* -----------------------------------------------------------------
-         ALL REMAINING TODAY + TOMORROW CONTENT (unchanged)
-         Deep work windows, flagged meetings, tomorrow block, modal, etc.
-         ----------------------------------------------------------------- */}
+      {/* -----------------------------------------------------
+         TODAY — WORK STORY
+      ----------------------------------------------------- */}
+      <section className="rounded-3xl border border-slate-800 bg-slate-950/70 px-6 py-6 shadow-[0_0_40px_rgba(15,23,42,0.7)]">
+        <h2 className="text-xs font-semibold tracking-[0.22em] text-slate-300/80 uppercase">
+          Today’s work story
+        </h2>
 
-      {/* (⭐ I am not pasting the rest again to save length.
-          You can safely keep everything below exactly as it is
-          from your currently working file.) */}
+        <p className="mt-3 text-sm text-slate-300 leading-relaxed">
+          {renderTodayWorkStory(workAbility)}
+        </p>
 
+        <p className="mt-2 text-sm text-slate-400">
+          {deepWork.length > 0
+            ? `Your strongest deep-work block begins around ${formatTime(
+                deepWork[0].start
+              )}.`
+            : "No clear deep-focus windows — consider manually protecting a block."}
+        </p>
+      </section>
+
+      {/* -----------------------------------------------------
+         TODAY — METRICS BAR
+      ----------------------------------------------------- */}
+      <section className="flex flex-wrap gap-3">
+        <MetricChip
+          label="Focus capacity"
+          value={`${workAbility}%`}
+          subtitle={loadLabel}
+        />
+        <MetricChip
+          label="Time booked"
+          value={`${meetingCount} meetings`}
+          subtitle={`${meetingMinutes} min`}
+        />
+        <MetricChip
+          label="Day fractures"
+          value={fractures}
+          subtitle={`${fractureMinutes} min lost`}
+        />
+        <MetricChip
+          label="Switch cost"
+          value={switches}
+          subtitle={`${switchCost} min tax`}
+        />
+      </section>
+
+      {/* -----------------------------------------------------
+         TODAY — MAIN GRID
+      ----------------------------------------------------- */}
+      <section className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1.1fr)] gap-10">
+        {/* -------------------------- LEFT: DAY FRAME -------------------------- */}
+        <div className="rounded-3xl border border-slate-800 bg-slate-950/70 px-6 py-5 shadow-[0_0_60px_rgba(15,23,42,0.9)]">
+          <h2 className="text-xs font-semibold tracking-[0.22em] text-slate-300/80 uppercase">
+            Day frame
+          </h2>
+          <p className="mt-1 text-xs text-slate-400">
+            High-noise blocks fracture attention and reduce clarity.
+          </p>
+
+          <div className="mt-4 space-y-5">
+            {timeline.length === 0 && (
+              <p className="text-sm text-slate-500">No meetings today.</p>
+            )}
+
+            {timeline.map((m, idx) => (
+              <button
+                key={`${m.start}-${idx}`}
+                type="button"
+                onClick={() => setSelectedMeeting(m)}
+                className="w-full text-left focus:outline-none"
+              >
+                <MeetingRow meeting={m} />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* -------------------------- RIGHT: DEEP WORK + NOISE -------------------------- */}
+        <div className="space-y-6">
+          {/* Deep Work */}
+          <div className="rounded-3xl border border-emerald-500/40 bg-emerald-900/10 px-5 py-5">
+            <h2 className="text-xs font-semibold tracking-[0.22em] text-emerald-200 uppercase">
+              Deep-work windows
+            </h2>
+            <p className="mt-1 text-xs text-emerald-100/80">
+              Echo identifies uninterrupted blocks so you can defend your best
+              work.
+            </p>
+
+            <div className="mt-4 space-y-3">
+              {deepWork.length === 0 && (
+                <p className="text-sm text-emerald-50/80">
+                  No deep-work windows today.
+                </p>
+              )}
+
+              {deepWork.map((w) => {
+                const defendKey = `${w.start}-${w.end}`;
+                const isLoading = defendLoadingKey === defendKey;
+
+                return (
+                  <div key={defendKey} className="space-y-2">
+                    <DeepWorkCard window={w} />
+                    <button
+                      className="text-xs text-emerald-200 underline hover:text-emerald-100 disabled:opacity-60"
+                      onClick={() => handleDefendBlock(w)}
+                      disabled={isLoading}
+                    >
+                      {isLoading ? "Defending this block…" : "Defend this block"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {showBreakHint && (
+              <p className="mt-4 text-xs text-emerald-200">
+                🧘‍♂️ Recommended: take 10 minutes between blocks to reset
+                context.
+              </p>
+            )}
+          </div>
+
+          {/* Noise & Follow-Up */}
+          <div className="rounded-3xl border border-slate-800 bg-slate-950/70 px-5 py-5">
+            {/* Meetings That Should Not Exist */}
+            <h3 className="text-[11px] font-semibold tracking-[0.2em] uppercase text-red-300/80 mt-4">
+              Meetings that should not exist (experimental)
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Flagged where the structural cost outweighs the value.
+            </p>
+
+            {flaggedMeetings.length === 0 && (
+              <p className="text-sm text-slate-500 mt-2">
+                No low-value meetings today.
+              </p>
+            )}
+
+            <div className="mt-3 space-y-3">
+              {flaggedMeetings.map((m, i) => {
+                const reasons = getMeetingFlagReasons(m, deepWork);
+
+                return (
+                  <div
+                    key={`${m.start}-${i}`}
+                    className="rounded-xl border border-red-500/60 bg-red-900/20 px-4 py-3 text-sm text-red-50/90"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">
+                        {m.title || "Untitled meeting"}
+                      </span>
+                      <span className="text-[11px] uppercase tracking-[0.18em] text-red-200">
+                        Noise {m.noiseScore}
+                      </span>
+                    </div>
+
+                    <p className="text-xs mt-1 text-red-100/80">
+                      {formatTime(m.start)} · {m.minutes} min · {m.attendees}{" "}
+                      attendee(s)
+                    </p>
+
+                    <details className="mt-2 text-xs text-red-100/90">
+                      <summary className="cursor-pointer underline">
+                        Why Echo flagged this
+                      </summary>
+                      <ul className="mt-1 list-disc list-inside space-y-0.5">
+                        {reasons.map((r, idx) => (
+                          <li key={idx}>{r}</li>
+                        ))}
+                      </ul>
+                    </details>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Follow-Up Heavy (existing behaviour) */}
+            {followUp.length > 0 && (
+              <>
+                <h3 className="text-xs tracking-[0.2em] uppercase text-red-300 mt-8">
+                  Follow-up heavy meetings
+                </h3>
+
+                {followUp.map((m: any, i: number) => (
+                  <div
+                    key={i}
+                    className="rounded-xl border border-red-500/60 bg-red-900/20 px-4 py-3 text-sm text-red-50/90"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{m.title}</span>
+                      <span className="text-[11px] uppercase tracking-[0.18em] text-red-200">
+                        Noise {m.noiseScore}
+                      </span>
+                    </div>
+
+                    <p className="text-xs mt-1 text-red-100/80">
+                      {m.attendees?.length ?? 0} attendee(s) ·{" "}
+                      {formatTime(m.start)}
+                    </p>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* -----------------------------------------------------
+         🔮 FULL TOMORROW SNAPSHOT (REAL DATA FROM SUPABASE)
+      ----------------------------------------------------- */}
+      <section className="rounded-3xl border border-sky-800 bg-slate-900/60 px-6 py-10 shadow-[0_0_70px_rgba(14,165,233,0.3)]">
+        <h2 className="text-xs font-semibold tracking-[0.22em] text-sky-300 uppercase">
+          Tomorrow • {tomorrowSnapshot?.date || ""}
+        </h2>
+
+        {!tomorrowSnapshot && (
+          <p className="mt-4 text-sm text-slate-500">
+            Tomorrow’s calendar snapshot hasn’t been generated yet.
+          </p>
+        )}
+
+        {tomorrowSnapshot && (
+          <div className="space-y-10 mt-6">
+            {/* AI Story */}
+            <div>
+              <h3 className="text-sm font-semibold text-slate-200">
+                Work story
+              </h3>
+              <p className="mt-2 text-sm text-slate-300">
+                {tomorrowSnapshot.aiStory || "No narrative available."}
+              </p>
+            </div>
+
+            {/* Metrics */}
+            <div className="flex flex-wrap gap-3">
+              <MetricChip
+                label="Focus capacity"
+                value={`${tomorrowSnapshot.calendarInsights?.workAbility ?? 0}%`}
+              />
+              <MetricChip
+                label="Meetings"
+                value={`${tomorrowSnapshot.calendarInsights?.meetingCount ?? 0}`}
+                subtitle={`${tomorrowSnapshot.calendarInsights?.meetingLoadMinutes ?? 0} min`}
+              />
+              <MetricChip
+                label="Fragments"
+                value={`${tomorrowSnapshot.calendarInsights?.fragments ?? 0}`}
+                subtitle={`${tomorrowSnapshot.calendarInsights?.lostFragmentMinutes ?? 0} min lost`}
+              />
+            </div>
+
+            {/* Deep Work Windows */}
+            <div>
+              <h3 className="text-xs tracking-[0.18em] uppercase text-emerald-300">
+                Deep-work windows
+              </h3>
+
+              <div className="mt-3 space-y-3">
+                {tomorrowSnapshot.deepWorkWindows?.length === 0 && (
+                  <p className="text-sm text-slate-500">
+                    No deep-work windows tomorrow.
+                  </p>
+                )}
+
+                {tomorrowSnapshot.deepWorkWindows?.map((w: any, i: number) => (
+                  <DeepWorkCard key={i} window={w} />
+                ))}
+              </div>
+            </div>
+
+            {/* Flagged Meetings */}
+            <div>
+              <h3 className="text-xs tracking-[0.18em] uppercase text-red-300">
+                Meetings that should not exist
+              </h3>
+
+              {tomorrowSnapshot.flaggedMeetings?.length === 0 && (
+                <p className="text-sm text-slate-500 mt-2">
+                  No low-value meetings tomorrow.
+                </p>
+              )}
+
+              <div className="mt-3 space-y-3">
+                {tomorrowSnapshot.flaggedMeetings?.map((m: any, i: number) => (
+                  <div
+                    key={i}
+                    className="rounded-xl border border-red-500/60 bg-red-900/20 px-4 py-3"
+                  >
+                    <div className="flex justify-between">
+                      <span className="text-red-100">{m.title}</span>
+                      <span className="text-[11px] text-red-200 uppercase">
+                        Noise {m.noiseScore}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-red-200 mt-1">
+                      {m.minutes} min · {m.attendees} attendee(s)
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Tomorrow Timeline */}
+            <div>
+              <h3 className="text-xs tracking-[0.18em] uppercase text-slate-300">
+                Tomorrow’s timeline
+              </h3>
+
+              {tomorrowSnapshot.dayTimeline?.length === 0 && (
+                <p className="text-sm text-slate-500">No events tomorrow.</p>
+              )}
+
+              <div className="mt-3 space-y-4">
+                {tomorrowSnapshot.dayTimeline?.map((m: any, i: number) => (
+                  <MeetingRow key={i} meeting={m} />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* -----------------------------------------------------
+         MODAL
+      ----------------------------------------------------- */}
+      {selectedMeeting && (
+        <MeetingDetailModal
+          meeting={selectedMeeting}
+          onClose={() => setSelectedMeeting(null)}
+        />
+      )}
     </div>
   );
 }
 
 /* ---------------------------------------------------------
-   HELPERS & COMPONENTS
+   COMPONENTS & HELPERS
+--------------------------------------------------------- */
+
+function MetricChip({
+  label,
+  value,
+  subtitle,
+}: {
+  label: string;
+  value: string | number;
+  subtitle?: string;
+}) {
+  return (
+    <div className="rounded-full border border-slate-700/80 bg-slate-900/70 px-4 py-2 text-xs text-slate-200 flex items-center gap-2">
+      <span className="uppercase tracking-[0.18em] text-[10px] text-slate-400">
+        {label}
+      </span>
+      <span className="font-semibold text-sm">{value}</span>
+      {subtitle && (
+        <span className="text-[11px] text-slate-400 whitespace-nowrap">
+          · {subtitle}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function MeetingRow({ meeting }: { meeting: TimelineItem }) {
+  const level =
+    meeting.noiseScore >= 7
+      ? "high"
+      : meeting.noiseScore >= 4
+      ? "medium"
+      : "low";
+
+  const dotColor =
+    level === "high"
+      ? "bg-red-400"
+      : level === "medium"
+      ? "bg-amber-300"
+      : "bg-emerald-300";
+
+  const badgeBg =
+    level === "high"
+      ? "bg-red-900/40 border-red-500/70 text-red-100"
+      : level === "medium"
+      ? "bg-amber-900/30 border-amber-400/70 text-amber-100"
+      : "bg-emerald-900/30 border-emerald-400/70 text-emerald-100";
+
+  const label =
+    level === "high"
+      ? "High noise"
+      : level === "medium"
+      ? "Moderate noise"
+      : "Low noise";
+
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/60 px-4 py-3 hover:border-slate-500/80 transition-colors">
+      <div className="flex gap-3">
+        <div className="flex flex-col items-center w-16 text-[11px] text-slate-400 pt-1">
+          <span>{formatTime(meeting.start)}</span>
+          <span className="opacity-60">{meeting.minutes} min</span>
+        </div>
+
+        <div className="flex flex-col items-center pt-2">
+          <span className={`h-2 w-2 rounded-full ${dotColor}`} />
+        </div>
+
+        <div className="flex-1">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-slate-100">
+              {meeting.title || "Untitled meeting"}
+            </p>
+            <span className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
+              {meeting.type === "online" ? "Online" : "In person"}
+            </span>
+          </div>
+
+          <p className="mt-1 text-xs text-slate-400">
+            {formatTime(meeting.start)} — {formatTime(meeting.end)} ·{" "}
+            {meeting.attendees} attendee(s)
+          </p>
+
+          <div className="mt-2 flex items-center gap-3">
+            <span
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] ${badgeBg}`}
+            >
+              {label}
+            </span>
+            <span className="text-[11px] text-slate-400">
+              Noise score {meeting.noiseScore}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeepWorkCard({ window }: { window: DeepWorkWindow }) {
+  return (
+    <div className="rounded-2xl border border-emerald-500/60 bg-emerald-900/30 px-4 py-3">
+      <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-200">
+        Deep-work window
+      </p>
+      <p className="mt-1 text-sm text-emerald-50">
+        {formatTime(window.start)} — {formatTime(window.end)}{" "}
+        <span className="ml-2 text-[11px] text-emerald-100/80">
+          • {window.minutes} mins
+        </span>
+      </p>
+    </div>
+  );
+}
+
+function MeetingDetailModal({
+  meeting,
+  onClose,
+}: {
+  meeting: TimelineItem;
+  onClose: () => void;
+}) {
+  const level =
+    meeting.noiseScore >= 7
+      ? "High noise"
+      : meeting.noiseScore >= 4
+      ? "Moderate noise"
+      : "Low noise";
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 px-6 py-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+              Meeting detail
+            </p>
+            <h2 className="mt-1 text-lg font-semibold text-white">
+              {meeting.title || "Untitled meeting"}
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-100 text-sm"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-2 text-sm text-slate-200">
+          <p>
+            <span className="text-slate-400">Time:</span>{" "}
+            {formatTime(meeting.start)} — {formatTime(meeting.end)} (
+            {meeting.minutes} mins)
+          </p>
+          <p>
+            <span className="text-slate-400">Type:</span>{" "}
+            {meeting.type === "online" ? "Online" : "In person"}
+          </p>
+          <p>
+            <span className="text-slate-400">Attendees:</span>{" "}
+            {meeting.attendees}
+          </p>
+          <p>
+            <span className="text-slate-400">Noise score:</span>{" "}
+            {meeting.noiseScore} ({level})
+          </p>
+        </div>
+
+        <p className="mt-4 text-xs text-slate-400">
+          Echo uses noise score, attendees and timing to estimate follow-up and
+          attention drag.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
+   FLAGGING LOGIC
 --------------------------------------------------------- */
 
 function shouldFlagMeeting(meeting: TimelineItem, deepWork: DeepWorkWindow[]) {
@@ -336,6 +835,27 @@ function deepWorkOverlap(m: TimelineItem, deep: DeepWorkWindow[]) {
     return mStart < wEnd && mEnd > wStart;
   });
 }
+
+/* ---------------------------------------------------------
+   TODAY RENDER HELPER
+--------------------------------------------------------- */
+
+function renderTodayWorkStory(workAbility: number) {
+  if (workAbility > 75)
+    return "Today is steady and spacious, with healthy pockets of clarity to lean into.";
+
+  if (workAbility > 60)
+    return "The morning is a little fractured but the afternoon clears; focus remains workable.";
+
+  if (workAbility > 45)
+    return "The day is mixed — meetings and gaps are interleaved, so focus will need protection.";
+
+  return "Today is structurally noisy with limited uninterrupted time — small, deliberate wins matter most.";
+}
+
+/* ---------------------------------------------------------
+   UTIL
+--------------------------------------------------------- */
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString("en-GB", {
