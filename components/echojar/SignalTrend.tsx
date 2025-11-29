@@ -1,7 +1,7 @@
 // components/echojar/SignalTrend.tsx
 
 import { TrendingUp } from "lucide-react";
-import { formatDateLabel } from "lib/formatDateLabel";
+import { formatDateLabel } from "@/lib/formatDateLabel";
 
 export interface TrendPoint {
   id: string;
