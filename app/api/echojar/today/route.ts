@@ -2,22 +2,24 @@ import { NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 
+function getLocalDateString() {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  return now.toISOString().split("T")[0];
+}
+
 export async function GET() {
   const supabase = createRouteHandlerClient({ cookies });
 
-  // Get authenticated user
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    return NextResponse.json({ entry: null }, { status: 200 });
+  // Get user
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (!user || userError) {
+    return NextResponse.json({ entry: null });
   }
 
-  // Today’s date as YYYY-MM-DD
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalDateString();
 
+  // Fetch today's entry
   const { data, error } = await supabase
     .from('echojar_daily')
     .select('*')
@@ -25,10 +27,10 @@ export async function GET() {
     .eq('date', today)
     .single();
 
-  // If not found, return null (NOT an error)
-  if (error && error.code !== 'PGRST116') {
-    console.error('EchoJar /today error:', error);
+  if (error) {
+    console.error('[today] Error fetching entry:', error);
+    return NextResponse.json({ entry: null });
   }
 
-  return NextResponse.json({ entry: data ?? null });
+  return NextResponse.json({ entry: data });
 }
