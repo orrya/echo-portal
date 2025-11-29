@@ -9,6 +9,7 @@ import {
   Settings as SettingsIcon,
   LogOut,
   BookOpen,
+  Sparkles,
 } from "lucide-react";
 import Image from "next/image";
 import { supabaseClient } from "@/lib/supabaseClient";
@@ -17,7 +18,8 @@ const navItems = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
   { name: "Emails", href: "/email", icon: Mail },
   { name: "Summaries", href: "/summary", icon: BookOpen },
-  { name: "Calendar", href: "/calendar", icon: Calendar }, // ← NEW
+  { name: "Calendar", href: "/calendar", icon: Calendar },
+  { name: "EchoJar", href: "/jar", icon: Sparkles }, // ← NEW
   { name: "Settings", href: "/settings", icon: SettingsIcon },
 ];
 
