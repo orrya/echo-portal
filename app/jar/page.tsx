@@ -1,8 +1,15 @@
 // app/jar/page.tsx
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
-import { Info } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Info,
+  Sparkles,
+  TrendingUp,
+  Brain,
+  Activity,
+  Clock3,
+} from "lucide-react";
 
 type EchoJarRow = {
   id: string;
@@ -108,7 +115,7 @@ function FocusGauge({ score }: { score: number | null }) {
       </div>
 
       <div className="relative flex items-center justify-center">
-        {/* Glow */}
+        {/* Gold glow */}
         <div className="absolute inset-0 rounded-full bg-amber-500/10 blur-xl" />
 
         {/* Outer ring */}
@@ -147,7 +154,7 @@ function FocusGauge({ score }: { score: number | null }) {
 
       <p className="max-w-xs text-[11px] leading-relaxed text-slate-400">
         <span className="font-medium text-slate-300">Focus score</span> is a
-        0–10 signal for how protected your best work windows were today. Roughly:
+        0–10 signal for how protected your best work windows were today.
         <br />
         <span className="text-slate-300">
           1–3 = fragmented · 4–6 = mixed · 7–10 = well-protected deep work.
@@ -161,7 +168,7 @@ function computeTimeSaved(entry: EchoJarRow) {
   const rawEmail = parseJson<any[]>(entry.raw_email, []);
   const rawCalendar = parseJson<any>(entry.raw_calendar, {});
 
-  // 1) Action emails → 45s each
+  // 1) Action-like emails → 45s each
   const actionEmails = rawEmail.filter((e) => {
     const category = (e?.Category || "").toLowerCase();
     const theme = (e?.theme || "").toLowerCase();
@@ -174,13 +181,13 @@ function computeTimeSaved(entry: EchoJarRow) {
   }).length;
   const emailMinutes = (actionEmails * 45) / 60;
 
-  // 2) Low/noise meetings → some minutes saved (20% of meeting load)
+  // 2) Meeting load → assume 20% protected / avoided / shortened
   const today = rawCalendar?.today || {};
   const calInsights = today?.calendar_insights || {};
   const meetingMinutes = Number(calInsights.meetingMinutes ?? 0);
-  const meetingSaved = meetingMinutes * 0.2; // 20% of that time as "protected"
+  const meetingSaved = meetingMinutes * 0.2;
 
-  // 3) Deep work windows from predictive_signals.energyMap → 10 min per 'High' block
+  // 3) High-energy deep blocks from predictive_signals.energyMap → 10 min each
   const signals = parseJson<any>(entry.predictive_signals, {});
   const energyMap = signals.energyMap || {};
   const deepBlocks = Object.values<string>(energyMap).filter((v) =>
@@ -206,6 +213,296 @@ function computeTimeSaved(entry: EchoJarRow) {
   };
 }
 
+// ──────────────────────────────────────────────────────────────
+// Persona + Trend + Category helpers
+// ──────────────────────────────────────────────────────────────
+
+type Persona = {
+  id: string;
+  label: string;
+  tone: "calm" | "loaded" | "recovering" | "ambitious";
+  summary: string;
+  headline: string;
+};
+
+function derivePersona(selected: EchoJarRow | null): Persona {
+  if (!selected) {
+    return {
+      id: "unknown",
+      label: "Forming",
+      tone: "calm",
+      headline: "EchoJar is still learning your rhythm.",
+      summary:
+        "As more days accumulate, Echo will classify your default working pattern and update this persona.",
+    };
+  }
+
+  const f = selected.focus_score ?? 0;
+  const s = selected.strain_score ?? 0;
+  const m = selected.momentum_score ?? 0;
+
+  // Deep focus, low strain
+  if (f >= 7 && s <= 4) {
+    return {
+      id: "deep-operator",
+      label: "Deep Operator",
+      tone: "calm",
+      headline: "Your day is built for deep work.",
+      summary:
+        "Focus windows stay clean and meetings aren’t overwhelming. Echo sees a pattern of deliberate work and low fragmentation.",
+    };
+  }
+
+  // High strain, lower focus
+  if (s >= 7 && f <= 5) {
+    return {
+      id: "load-bearer",
+      label: "Load Bearer",
+      tone: "loaded",
+      headline: "You’re carrying a heavy operational load.",
+      summary:
+        "Calendar and email drag are eating into focus. Echo flags this pattern as structurally noisy and energy intensive.",
+    };
+  }
+
+  // Moderate focus, rising momentum
+  if (m >= 6 && f >= 5) {
+    return {
+      id: "builder",
+      label: "Momentum Builder",
+      tone: "ambitious",
+      headline: "You’re steadily compounding progress.",
+      summary:
+        "Days aren’t perfectly clean, but important work keeps moving forward. Echo sees momentum building across your week.",
+    };
+  }
+
+  // Otherwise: recalibrating
+  return {
+    id: "recalibrating",
+    label: "Recalibrating",
+    tone: "recovering",
+    headline: "Today’s pattern is still settling.",
+    summary:
+      "Signals are mixed — some focus, some drag. Echo treats this as a calibration day rather than a strong pattern.",
+  };
+}
+
+type TrendPoint = {
+  id: string;
+  date: string;
+  focus: number | null;
+  strain: number | null;
+};
+
+function buildSignalSeries(entries: EchoJarRow[]): TrendPoint[] {
+  return [...entries]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((e) => ({
+      id: e.id,
+      date: e.date,
+      focus: e.focus_score,
+      strain: e.strain_score,
+    }));
+}
+
+type CategoryInsight = {
+  label: string;
+  count: number;
+  lastSeen: string;
+};
+
+function computeCategoryInsights(entries: EchoJarRow[]): CategoryInsight[] {
+  const map = new Map<string, { count: number; lastSeen: string }>();
+
+  for (const entry of entries) {
+    const themes: string[] = parseJson(entry.emerging_themes, []);
+    const tags: string[] = parseJson(entry.tags, []);
+    const all = [...themes, ...tags];
+
+    for (const rawLabel of all) {
+      const label = (rawLabel || "").toString().trim().toLowerCase();
+      if (!label) continue;
+      const current = map.get(label);
+      if (!current) {
+        map.set(label, { count: 1, lastSeen: entry.date });
+      } else {
+        current.count += 1;
+        if (entry.date > current.lastSeen) {
+          current.lastSeen = entry.date;
+        }
+      }
+    }
+  }
+
+  return Array.from(map.entries())
+    .map(([label, v]) => ({ label, count: v.count, lastSeen: v.lastSeen }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
+}
+
+// ──────────────────────────────────────────────────────────────
+// Small visual components
+// ──────────────────────────────────────────────────────────────
+
+function PersonaCard({ persona }: { persona: Persona }) {
+  return (
+    <div
+      className="
+        rounded-2xl border border-slate-800 bg-slate-950/80
+        p-4 shadow-[0_0_32px_rgba(15,23,42,0.85)]
+      "
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-amber-300" />
+          <div className="text-xs uppercase tracking-[0.24em] text-slate-400">
+            Today&apos;s persona
+          </div>
+        </div>
+        <span
+          className="
+            rounded-full border border-amber-400/60 bg-amber-500/10
+            px-2 py-[2px] text-[10px] uppercase tracking-[0.2em]
+            text-amber-200
+          "
+        >
+          {persona.label}
+        </span>
+      </div>
+      <h3 className="text-sm font-medium text-slate-100 mb-1">
+        {persona.headline}
+      </h3>
+      <p className="text-xs text-slate-400 leading-relaxed">
+        {persona.summary}
+      </p>
+    </div>
+  );
+}
+
+function SignalTrend({ series }: { series: TrendPoint[] }) {
+  if (!series.length) return null;
+
+  const maxScore = 10;
+  const points = series.slice(-7); // last 7 days
+
+  return (
+    <div
+      className="
+        rounded-2xl border border-slate-800 bg-slate-950/80
+        p-4 shadow-[0_0_30px_rgba(15,23,42,0.75)]
+      "
+    >
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-sky-300" />
+          <div className="text-xs uppercase tracking-[0.24em] text-slate-400">
+            Signal trend
+          </div>
+        </div>
+        <span className="text-[10px] text-slate-500">
+          Last {points.length} days
+        </span>
+      </div>
+
+      <div className="flex items-end gap-2 h-24">
+        {points.map((p) => {
+          const f = p.focus ?? 0;
+          const s = p.strain ?? 0;
+          const focusHeight = (Math.max(0, f) / maxScore) * 100;
+          const strainHeight = (Math.max(0, s) / maxScore) * 100;
+          const label = formatDateLabel(p.date).replace(/, \d{4}$/, "");
+
+          return (
+            <div
+              key={p.id}
+              className="flex flex-1 flex-col items-center gap-1"
+            >
+              <div className="flex w-full items-end gap-1">
+                {/* Focus bar */}
+                <div
+                  className="flex-1 rounded-full bg-amber-500/20"
+                  style={{ height: `${focusHeight || 4}%` }}
+                  title={`Focus ${f ?? "—"}/10`}
+                />
+                {/* Strain bar */}
+                <div
+                  className="flex-1 rounded-full bg-sky-500/20"
+                  style={{ height: `${strainHeight || 4}%` }}
+                  title={`Load ${s ?? "—"}/10`}
+                />
+              </div>
+              <div className="text-[9px] text-slate-500 text-center">
+                {label.split(" ").slice(0, 2).join(" ")}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-3 flex items-center justify-between text-[10px] text-slate-500">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex h-2 w-2 rounded-full bg-amber-400" />
+          <span>Focus protection</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="inline-flex h-2 w-2 rounded-full bg-sky-400" />
+          <span>Load / drag</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CategoryInsightsCard({ items }: { items: CategoryInsight[] }) {
+  if (!items.length) return null;
+
+  return (
+    <div
+      className="
+        rounded-2xl border border-slate-800 bg-slate-950/80
+        p-4 shadow-[0_0_26px_rgba(15,23,42,0.7)]
+      "
+    >
+      <div className="mb-3 flex items-center gap-2">
+        <Brain className="h-4 w-4 text-violet-300" />
+        <div className="text-xs uppercase tracking-[0.24em] text-slate-400">
+          Category insights
+        </div>
+        <InfoBadge text="Top repeated themes and tags Echo sees across your recent days." />
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {items.map((item) => (
+          <div
+            key={item.label}
+            className="
+              flex flex-col gap-1 rounded-xl border border-slate-800
+              bg-slate-950/80 px-3 py-2
+            "
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] uppercase tracking-[0.18em] text-slate-300">
+                {item.label}
+              </span>
+              <span className="text-[11px] text-slate-400">
+                {item.count}×
+              </span>
+            </div>
+            <span className="text-[10px] text-slate-500">
+              Last seen {formatDateLabel(item.lastSeen).replace(/, \d{4}$/, "")}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────
+// MAIN PAGE
+// ──────────────────────────────────────────────────────────────
+
 export default function EchoJarPage() {
   const [entries, setEntries] = useState<EchoJarRow[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -224,7 +521,7 @@ export default function EchoJarPage() {
         const list: EchoJarRow[] = json.entries ?? [];
         setEntries(list);
         if (list.length > 0) {
-          setSelectedId(list[0].id);
+          setSelectedId(list[list.length - 1].id); // default to most recent
         }
       } catch (e: any) {
         console.error("[EchoJar] fetch error", e);
@@ -237,7 +534,7 @@ export default function EchoJarPage() {
   }, []);
 
   const selected = useMemo(
-    () => entries.find((e) => e.id === selectedId) ?? entries[0] ?? null,
+    () => entries.find((e) => e.id === selectedId) ?? entries[entries.length - 1] ?? null,
     [entries, selectedId]
   );
 
@@ -254,6 +551,18 @@ export default function EchoJarPage() {
 
   const timeSaved = selected ? computeTimeSaved(selected) : null;
 
+  const focusScore = selected?.focus_score ?? null;
+  const strainScore = selected?.strain_score ?? null;
+  const momentumScore = selected?.momentum_score ?? null;
+  const consistencyScore = selected?.consistency_score ?? null;
+
+  const dateLabel = selected ? formatDateLabel(selected.date) : "";
+  const headline = "Your quiet behavioural OS.";
+
+  const persona = derivePersona(selected);
+  const series = buildSignalSeries(entries);
+  const categoryInsights = computeCategoryInsights(entries);
+
   // ──────────────────────────────────────────────────────────────
   // Loading / empty states
   // ──────────────────────────────────────────────────────────────
@@ -265,17 +574,18 @@ export default function EchoJarPage() {
     );
   }
 
-  if (!selected) {
+  if (error || !selected) {
     return (
       <main className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-6xl items-center px-6">
         <div className="max-w-xl">
-          <h1 className="text-3xl sm:text-4xl font-semibold mb-3">
+          <h1 className="mb-3 text-3xl sm:text-4xl font-semibold">
             EchoJar hasn&apos;t formed yet.
           </h1>
           <p className="text-slate-400 leading-relaxed">
             Once Echo has seen enough of your day (email, meetings, summaries),
             it will start forming a daily EchoJar entry with patterns, themes
-            and signals. Check back after your AM and PM summaries have run.
+            and early predictions. Check back after a few AM and PM summaries
+            have been generated.
           </p>
         </div>
       </main>
@@ -283,29 +593,43 @@ export default function EchoJarPage() {
   }
 
   // ──────────────────────────────────────────────────────────────
-  // Main UI
+  // MAIN UI
   // ──────────────────────────────────────────────────────────────
-  const dateLabel = formatDateLabel(selected.date);
-  const focusScore = selected.focus_score ?? null;
-  const strainScore = selected.strain_score ?? null;
-  const momentumScore = selected.momentum_score ?? null;
-  const consistencyScore = selected.consistency_score ?? null;
-
-  const headline = "Your quiet timeline.";
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10 space-y-10">
       {/* HERO ROW */}
-      <section className="grid gap-10 md:grid-cols-[minmax(0,7fr)_minmax(0,4fr)]">
+      <section className="grid gap-10 md:grid-cols-[minmax(0,7fr)_minmax(0,4fr)] items-start">
         <div className="space-y-4">
-          <div className="text-xs uppercase tracking-[0.26em] text-slate-400">
-            EchoJar
+          <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/10 px-3 py-1">
+            <span className="text-[10px] uppercase tracking-[0.3em] text-amber-200">
+              EchoJar
+            </span>
+            <span className="h-[3px] w-[3px] rounded-full bg-amber-300" />
+            <span className="text-[10px] text-amber-100/80">
+              behavioural intelligence
+            </span>
           </div>
-          <h1 className="text-3xl sm:text-4xl font-semibold">{headline}</h1>
-          <div className="text-xs text-slate-400">{dateLabel}</div>
+
+          <h1 className="text-3xl sm:text-4xl font-semibold">
+            {headline}{" "}
+            <span className="bg-gradient-to-r from-amber-200 via-amber-400 to-sky-300 bg-clip-text text-transparent">
+              for your workday.
+            </span>
+          </h1>
+
+          <div className="flex items-center gap-3 text-xs text-slate-400">
+            <span>{dateLabel}</span>
+            <span className="h-[1px] w-8 bg-slate-700" />
+            <span className="flex items-center gap-1">
+              <Activity className="h-3 w-3 text-emerald-300" />
+              <span>Echo learns from every AM / PM summary, email and meeting.</span>
+            </span>
+          </div>
+
           <p className="max-w-2xl text-sm sm:text-[15px] leading-relaxed text-slate-300">
             {behaviour ||
-              "Once Echo has seen enough of your day, it will form a calm summary here."}
+              "Once Echo has seen enough of your day, it will form a calm behavioural summary here — not of what you did, but of how you tend to work."}
           </p>
         </div>
 
@@ -373,7 +697,7 @@ export default function EchoJarPage() {
       </section>
 
       {/* MAIN CONTENT GRID */}
-      <section className="grid gap-10 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+      <section className="grid gap-10 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
         {/* LEFT COLUMN – ENTRY DETAILS */}
         <div className="space-y-8">
           {/* Entry heading */}
@@ -417,7 +741,7 @@ export default function EchoJarPage() {
               <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
                 Patterns
               </div>
-              <InfoBadge text="Simple rule-based patterns Echo keeps an eye on over time." />
+              <InfoBadge text="Simple, interpretable patterns Echo keeps an eye on across days." />
             </div>
             <ul className="space-y-1 text-sm text-slate-300">
               {patterns.length === 0 && (
@@ -437,8 +761,10 @@ export default function EchoJarPage() {
           {/* Wins & Strains */}
           <div className="grid gap-8 md:grid-cols-2">
             <div className="space-y-2">
-              <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
-                Wins
+              <div className="flex items-center gap-1">
+                <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                  Wins
+                </div>
               </div>
               <ul className="space-y-1 text-sm text-slate-300">
                 {wins.length === 0 && (
@@ -456,8 +782,10 @@ export default function EchoJarPage() {
             </div>
 
             <div className="space-y-2">
-              <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
-                Strains
+              <div className="flex items-center gap-1">
+                <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                  Strains
+                </div>
               </div>
               <ul className="space-y-1 text-sm text-slate-300">
                 {strains.length === 0 && (
@@ -481,7 +809,7 @@ export default function EchoJarPage() {
               <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
                 Adjustments
               </div>
-              <InfoBadge text="Light-touch nudges Echo thinks could improve tomorrow." />
+              <InfoBadge text="Light-touch nudges Echo thinks could make tomorrow feel quieter." />
             </div>
             <ul className="space-y-1 text-sm text-slate-300">
               {adjustments.length === 0 && (
@@ -499,7 +827,7 @@ export default function EchoJarPage() {
           </div>
         </div>
 
-        {/* RIGHT COLUMN – SIGNALS & TIME SAVED */}
+        {/* RIGHT COLUMN – SIGNALS, PERSONA, TIME SAVED, TRENDS */}
         <div className="space-y-6">
           {/* Signals card */}
           <div
@@ -509,8 +837,11 @@ export default function EchoJarPage() {
             "
           >
             <div className="mb-4 flex items-center justify-between">
-              <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
-                Signals
+              <div className="flex items-center gap-2">
+                <Activity className="h-4 w-4 text-emerald-300" />
+                <div className="text-xs uppercase tracking-[0.24em] text-slate-400">
+                  Signals
+                </div>
               </div>
             </div>
 
@@ -537,7 +868,7 @@ export default function EchoJarPage() {
               />
             </div>
 
-            {/* Optional small tags */}
+            {/* Optional tags */}
             {tags && tags.length > 0 && (
               <div className="mt-4 flex flex-wrap gap-2">
                 {tags.map((tag: string) => (
@@ -555,6 +886,9 @@ export default function EchoJarPage() {
             )}
           </div>
 
+          {/* Persona */}
+          <PersonaCard persona={persona} />
+
           {/* Time saved card */}
           <div
             className="
@@ -569,7 +903,7 @@ export default function EchoJarPage() {
                   <div className="text-xs uppercase tracking-[0.24em] text-amber-300/80">
                     Time saved
                   </div>
-                  <InfoBadge text="Rough estimate based on action emails, low/noise meetings and deep work windows Echo protected for you." />
+                  <InfoBadge text="Estimate based on action-like emails, low/noise meetings and high-energy deep work windows Echo protects for you." />
                 </div>
                 <p className="mt-1 text-[11px] text-amber-100/80">
                   Echo&apos;s rough estimate of time you defended from noise
@@ -604,7 +938,7 @@ export default function EchoJarPage() {
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Action emails resolved</span>
+                  <span>Action-like emails</span>
                   <span>
                     {timeSaved.breakdown.actionEmails} ·{" "}
                     {timeSaved.breakdown.emailMinutes} min
@@ -613,6 +947,10 @@ export default function EchoJarPage() {
               </div>
             )}
           </div>
+
+          {/* Trend + category insights */}
+          <SignalTrend series={series} />
+          <CategoryInsightsCard items={categoryInsights} />
         </div>
       </section>
     </main>
