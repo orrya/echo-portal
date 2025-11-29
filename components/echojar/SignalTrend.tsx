@@ -1,7 +1,21 @@
 // components/echojar/SignalTrend.tsx
 
 import { TrendingUp } from "lucide-react";
-import { formatDateLabel } from "@/lib/formatDateLabel";
+
+/** Local inline formatter — no external import required */
+function formatDateLabel(dateStr: string) {
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("en-GB", {
+      weekday: "short",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return dateStr;
+  }
+}
 
 export interface TrendPoint {
   id: string;
@@ -41,6 +55,7 @@ export function SignalTrend({ series }: { series: TrendPoint[] }) {
           const s = p.strain ?? 0;
           const focusHeight = (Math.max(0, f) / maxScore) * 100;
           const strainHeight = (Math.max(0, s) / maxScore) * 100;
+
           const label = formatDateLabel(p.date).replace(/, \d{4}$/, "");
 
           return (
