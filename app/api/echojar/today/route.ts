@@ -1,6 +1,5 @@
-import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 function getLocalDateString() {
   const now = new Date();
@@ -9,26 +8,23 @@ function getLocalDateString() {
 }
 
 export async function GET() {
-  const supabase = createRouteHandlerClient({ cookies });
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
 
-  // Get user
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-  if (!user || userError) {
-    return NextResponse.json({ entry: null });
-  }
-
+  const userId = "75925360-ebf2-4542-a672-2449d2cf84a1";
   const today = getLocalDateString();
 
-  // Fetch today's entry
   const { data, error } = await supabase
-    .from('echojar_daily')
-    .select('*')
-    .eq('user_id', user.id)
-    .eq('date', today)
+    .from("echojar_daily")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("date", today)
     .single();
 
-  if (error) {
-    console.error('[today] Error fetching entry:', error);
+  if (error || !data) {
+    console.error("[today] No EchoJar entry for today:", error);
     return NextResponse.json({ entry: null });
   }
 
