@@ -1,22 +1,24 @@
-// app/api/echojar/all/route.ts
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 
 export async function GET() {
   const supabase = createRouteHandlerClient({ cookies });
 
-  // Get authenticated user
+  // 1. Get logged-in user
   const {
     data: { user },
     error: userError,
   } = await supabase.auth.getUser();
 
+  console.log("USER from API:", user);   // <-- IMPORTANT DEBUG LOG
+
   if (userError || !user) {
+    console.log("No user found. Returning empty.");
     return NextResponse.json({ entries: [] }, { status: 200 });
   }
 
-  // Fetch all EchoJar entries for the user
+  // 2. Fetch entries
   const { data, error } = await supabase
     .from('echojar_daily')
     .select('*')
@@ -25,7 +27,7 @@ export async function GET() {
     .limit(30);
 
   if (error) {
-    console.error('EchoJar /all error:', error);
+    console.error("Supabase error:", error);
     return NextResponse.json({ entries: [] }, { status: 200 });
   }
 
