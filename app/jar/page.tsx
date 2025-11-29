@@ -1,624 +1,752 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 
-// ---------------------------
-// Types matching your schema
-// ---------------------------
+/* -------------------------------------------------------
+   Types – aligned with your echo_jar row
+------------------------------------------------------- */
 
-type EchoRecommendations = {
+type Recommendations = {
   wins?: string[];
   strains?: string[];
   adjustments?: string[];
 };
 
-type EchoPredictiveSignals = {
+type PredictiveSignals = {
   focusOutlook?: string | null;
-  attentionRisks?: string[];
+  attentionRisks?: string[] | null;
   energyMap?: Record<string, string> | null;
 };
 
-export type EchoJarEntry = {
-  id: string;
-  user_id: string;
-  date: string; // "YYYY-MM-DD"
-
-  raw_email?: any[];
-  raw_calendar?: any;
-  raw_am_summary?: any;
-  raw_pm_summary?: any;
-
-  behavioural_summary?: string;
-  emerging_themes?: string[];
-  detected_patterns?: string[];
-  recommendations?: EchoRecommendations;
-  predictive_signals?: EchoPredictiveSignals;
-  tags?: string[];
-
-  focus_score?: number | null; // 0–10
-  strain_score?: number | null; // 0–10
-  momentum_score?: number | null; // 0–10
-  consistency_score?: number | null; // 0–10
-
-  created_at?: string;
+type EchoJarRow = {
+  date: string;
+  behavioural_summary: string | null;
+  emerging_themes: string[] | null;
+  detected_patterns: string[] | null;
+  recommendations: Recommendations | null;
+  predictive_signals: PredictiveSignals | null;
+  focus_score: number | null;
+  strain_score: number | null;
+  momentum_score: number | null;
+  consistency_score: number | null;
+  raw_email: any[] | null;
+  raw_calendar: any | null;
+  raw_am_summary: any;
+  raw_pm_summary: any;
+  tags: string[] | null;
+  created_at: string;
 };
 
-// ---------------------------------------------
-// ❗ TEMP: Mock data – replace with Supabase
-// ---------------------------------------------
+type SelectedPanel =
+  | "none"
+  | "wins"
+  | "strains"
+  | "adjustments"
+  | "patterns"
+  | "themes"
+  | "energy"
+  | "attention"
+  | "raw";
 
-const MOCK_ENTRIES: EchoJarEntry[] = [
-  {
-    id: "demo-1",
-    user_id: "demo-user",
-    date: "2025-11-29",
-    behavioural_summary:
-      "Focused and structured with long uninterrupted deep work blocks, minimal task switching, and limited but purposeful meetings.",
-    emerging_themes: ["focus", "low meeting load", "admin"],
-    detected_patterns: [
-      "Preference for long deep work windows with few context switches or fragmentation",
-      "Low noise and distractions during focused periods",
-      "Minimal meeting fragmentation and context switching",
-    ],
-    recommendations: {
-      wins: [
-        "Sustained deep work sessions totaling 420 minutes",
-        "Single well-structured in-person meeting with low noise",
-        "High work ability score at 88",
-      ],
-      strains: [
-        "Meeting occupies a fixed 60-minute block",
-        "Potential low cognitive load could indicate under-stimulation",
-      ],
-      adjustments: [
-        "Consider scheduling varied cognitive tasks to maintain stimulation throughout day",
-        "Maintain meeting frequency to preserve deep work time",
-        "Monitor for potential cognitive underload and adjust task complexity accordingly",
-      ],
-    },
-    predictive_signals: {
-      focusOutlook:
-        "High potential for productive focus maintained by long work blocks, with stable environment supporting concentration.",
-      attentionRisks: [
-        "Relatively low cognitive load might risk dips in engagement.",
-        "Single meeting could disrupt flow if not well-prepared.",
-      ],
-      energyMap: {
-        "09:00–10:00": "High focus – deep work before meeting.",
-        "10:00–11:00": "Moderate – in-person meeting, some noise.",
-        "11:00–17:00": "High – extended deep work window.",
-        Other: "Low – wind-down and recovery.",
-      },
-    },
-    tags: ["admin"],
-    focus_score: 8,
-    strain_score: 3,
-    momentum_score: 7,
-    consistency_score: 8,
-    created_at: "2025-11-29T12:58:08.645838+00",
-  },
-];
+/* -------------------------------------------------------
+   Page Component
+------------------------------------------------------- */
 
-// -------------------------------------------------
-// Utility: pretty date + derived fields per entry
-// -------------------------------------------------
+export default function EchoJarPage() {
+  const [jar, setJar] = useState<EchoJarRow | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedPanel, setSelectedPanel] = useState<SelectedPanel>("none");
 
-function formatDate(dateStr: string) {
-  try {
-    const d = new Date(dateStr + "T00:00:00");
-    return new Intl.DateTimeFormat("en-GB", {
-      weekday: "short",
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }).format(d);
-  } catch {
-    return dateStr;
-  }
-}
+  useEffect(() => {
+    let cancelled = false;
 
-function shortDateLabel(dateStr: string) {
-  try {
-    const d = new Date(dateStr + "T00:00:00");
-    const weekday = new Intl.DateTimeFormat("en-GB", {
-      weekday: "short",
-    }).format(d);
-    const day = new Intl.DateTimeFormat("en-GB", {
-      day: "2-digit",
-    }).format(d);
-    const month = new Intl.DateTimeFormat("en-GB", {
-      month: "short",
-    }).format(d);
-    return `${weekday} ${day} ${month}`;
-  } catch {
-    return dateStr;
-  }
-}
+    async function loadJar() {
+      try {
+        const res = await fetch("/api/echojar/today");
+        const json = await res.json();
+        if (!cancelled) {
+          setJar(json.jar ?? null);
+        }
+      } catch (err) {
+        console.error("Failed to load EchoJar", err);
+        if (!cancelled) setJar(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
 
-function deriveHeadline(entry: EchoJarEntry) {
-  if (!entry.behavioural_summary) {
-    return "Quiet, low-noise workday.";
-  }
-  const firstSentence = entry.behavioural_summary.split(".")[0].trim();
-  return firstSentence || entry.behavioural_summary;
-}
+    loadJar();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-function deriveTomorrowFocus(entry: EchoJarEntry) {
-  const focusOutlook = entry.predictive_signals?.focusOutlook;
-  if (focusOutlook) return focusOutlook;
-  if (entry.recommendations?.adjustments?.length) {
-    return entry.recommendations.adjustments[0];
-  }
-  return "Tomorrow, Echo suggests you protect one clear focus window and keep your meetings honest.";
-}
-
-function clampScore(score: number | null | undefined) {
-  if (score == null || Number.isNaN(score)) return null;
-  return Math.max(0, Math.min(10, score));
-}
-
-function scoreToPercent(score: number | null | undefined) {
-  const s = clampScore(score);
-  if (s == null) return 0;
-  return (s / 10) * 100;
-}
-
-// -----------------------
-// Layout root component
-// -----------------------
-
-export default function JarPage() {
-  // TODO: replace MOCK_ENTRIES with Supabase data:
-  // const entries = dataFromSupabase ?? [];
-  const entries = MOCK_ENTRIES;
-
-  const [selectedId, setSelectedId] = useState<string | null>(
-    entries[0]?.id ?? null,
-  );
-
-  const selected = useMemo(
-    () => entries.find((e) => e.id === selectedId) ?? entries[0],
-    [entries, selectedId],
-  );
-
-  return (
-    <main className="min-h-screen bg-[#050814] text-slate-100">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 pb-10 pt-10 lg:flex-row lg:gap-10">
-        {/* Left: hero + timeline */}
-        <div className="flex flex-1 flex-col gap-6">
-          <HeroPanel selected={selected} />
-
-          <TimelinePanel
-            entries={entries}
-            selectedId={selected?.id ?? null}
-            onSelect={(id) => setSelectedId(id)}
-          />
-        </div>
-
-        {/* Right: entry drawer (on desktop always visible; on mobile it sits below) */}
-        <div className="mt-2 w-full rounded-3xl border border-white/5 bg-gradient-to-b from-slate-950/70 to-slate-950/40 p-5 shadow-[0_0_40px_rgba(0,0,0,0.65)] lg:mt-0 lg:w-[380px]">
-          {selected && <EntryDetail entry={selected} />}
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-6xl px-6 py-14">
+        <div className="animate-pulse space-y-6">
+          <div className="h-10 w-2/3 rounded-xl bg-slate-800/70" />
+          <div className="h-24 rounded-3xl bg-slate-900/70" />
+          <div className="h-64 rounded-3xl bg-slate-900/70" />
         </div>
       </div>
-    </main>
-  );
-}
+    );
+  }
 
-// --------------------------
-// Hero panel (top section)
-// --------------------------
+  if (!jar) {
+    return (
+      <div className="mx-auto max-w-6xl px-6 py-20 text-slate-300">
+        <h1 className="text-2xl font-semibold text-white">
+          EchoJar hasn&apos;t formed yet.
+        </h1>
+        <p className="mt-3 max-w-xl text-sm text-slate-400">
+          Once Echo has seen enough of your day (email, meetings, summaries),
+          it will start forming a daily EchoJar entry with patterns, themes and
+          signals. Check back after your AM and PM summaries have run.
+        </p>
+      </div>
+    );
+  }
 
-function HeroPanel({ selected }: { selected: EchoJarEntry | undefined }) {
-  const focusScore = clampScore(selected?.focus_score ?? null);
-  const focusPercent = scoreToPercent(selected?.focus_score ?? null);
+  const createdLabel = new Date(jar.created_at).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const dateLabel = new Date(jar.date).toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+
+  const focus = jar.focus_score;
+  const strain = jar.strain_score;
+  const momentum = jar.momentum_score;
+  const consistency = jar.consistency_score;
+
+  const recs = jar.recommendations || {};
+  const signals = jar.predictive_signals || {};
+
+  const themes = jar.emerging_themes || [];
+  const patterns = jar.detected_patterns || [];
+
+  const activePanelTitle = (() => {
+    switch (selectedPanel) {
+      case "wins":
+        return "Wins";
+      case "strains":
+        return "Strains";
+      case "adjustments":
+        return "Adjustments";
+      case "patterns":
+        return "Behavioural patterns";
+      case "themes":
+        return "Emerging themes";
+      case "energy":
+        return "Energy map";
+      case "attention":
+        return "Attention risks";
+      case "raw":
+        return "Raw signals";
+      default:
+        return "EchoJar details";
+    }
+  })();
 
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-br from-slate-950/80 via-slate-950/60 to-slate-900/40 p-6 shadow-[0_26px_80px_rgba(0,0,0,0.75)]">
-      {/* soft gold glow */}
-      <div className="pointer-events-none absolute inset-0 opacity-60 mix-blend-screen">
-        <div className="absolute -right-16 -top-20 h-52 w-52 rounded-full bg-[radial-gradient(circle_at_center,#f1d8a6_0,transparent_60%)] blur-3xl" />
-      </div>
+    <div className="mx-auto max-w-6xl px-6 py-14 space-y-10">
+      {/* ---------------------------------------------------
+         HERO
+      ---------------------------------------------------- */}
+      <header className="space-y-5">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-semibold tracking-[0.28em] text-slate-400 uppercase">
+              Echo · Daily Jar
+            </p>
+            <h1 className="mt-3 text-3xl sm:text-4xl font-semibold leading-tight text-white">
+              Your quiet{" "}
+              <span className="bg-[linear-gradient(120deg,#facc15,#eab308,#f97316)] bg-clip-text text-transparent">
+                operating system
+              </span>{" "}
+              for today.
+            </h1>
+            <p className="mt-3 max-w-xl text-sm text-slate-300">
+              EchoJar condenses email, meetings and summaries into a single
+              daily intelligence object — themes, patterns and signals about
+              how you actually worked.
+            </p>
+          </div>
 
-      <div className="relative flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="space-y-2">
-          <p className="text-xs font-medium uppercase tracking-[0.22em] text-slate-400">
-            EchoJar
-          </p>
-          <h1 className="text-2xl font-semibold text-slate-50 md:text-3xl">
-            Your quiet timeline.
-          </h1>
-          {selected && (
-            <>
-              <p className="text-xs text-slate-400">
-                {formatDate(selected.date)}
-              </p>
-              <p className="max-w-xl text-sm leading-relaxed text-slate-300">
-                {deriveHeadline(selected)}
-              </p>
-            </>
+          <div className="flex flex-col items-end gap-2 text-right">
+            <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/60 bg-slate-950/80 px-4 py-1.5 shadow-[0_0_25px_rgba(251,191,36,0.25)]">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.9)]" />
+              <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-amber-200">
+                Daily Jar · Live
+              </span>
+            </div>
+            <div className="text-xs text-slate-400">
+              {dateLabel} · captured at{" "}
+              <span className="text-slate-200">{createdLabel}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Key tags pill row */}
+        <div className="flex flex-wrap gap-2">
+          {themes.slice(0, 4).map((t) => (
+            <span
+              key={t}
+              className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs text-amber-100"
+            >
+              {t}
+            </span>
+          ))}
+          {themes.length === 0 && (
+            <span className="rounded-full border border-slate-700/80 bg-slate-900/80 px-3 py-1 text-xs text-slate-300">
+              Echo is still learning your themes.
+            </span>
           )}
         </div>
+      </header>
 
-        {/* Focus pill */}
-        <div className="mt-3 flex items-start md:mt-0">
-          <div className="relative">
-            <div className="h-20 w-20 rounded-full bg-gradient-to-b from-slate-900/80 to-slate-950/60 p-[1px]">
-              <div className="flex h-full w-full items-center justify-center rounded-full bg-slate-950/90">
-                <div className="relative h-16 w-16 rounded-full bg-slate-950 shadow-[0_0_0_1px_rgba(248,250,252,0.05)]">
-                  <div className="absolute inset-[3px] rounded-full bg-[radial-gradient(circle_at_30%_10%,rgba(241,216,166,0.45)_0,transparent_55%),radial-gradient(circle_at_80%_90%,rgba(248,250,252,0.25)_0,transparent_55%)]" />
-                  <div className="relative flex h-full w-full flex-col items-center justify-center text-[11px]">
-                    <span className="text-[9px] uppercase tracking-[0.22em] text-slate-400">
-                      Focus
-                    </span>
-                    <span className="text-lg font-semibold text-slate-50">
-                      {focusScore ?? "–"}
-                    </span>
-                    <span className="text-[9px] text-slate-400">/10</span>
-                  </div>
-                </div>
+      {/* ---------------------------------------------------
+         GRID: LEFT (overview) • RIGHT (detail panel)
+      ---------------------------------------------------- */}
+      <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1.1fr)] gap-8">
+        {/* LEFT COLUMN */}
+        <div className="space-y-6">
+          {/* Signal Bars */}
+          <div className="rounded-3xl border border-slate-800 bg-slate-950/80 px-5 py-5 shadow-[0_0_40px_rgba(15,23,42,0.9)]">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <h2 className="text-xs font-semibold tracking-[0.22em] text-slate-300/90 uppercase">
+                  Today&apos;s signals
+                </h2>
+                <InfoTooltip label="What is this?">
+                  These four bars are compact scores EchoJar derives from your
+                  calendar, email and summaries. They don&apos;t judge you —
+                  they describe how the day is structured and how it likely
+                  felt.
+                </InfoTooltip>
+              </div>
+              <span className="text-[11px] text-slate-500">
+                0 = quiet · 10 = intense
+              </span>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <SignalBar
+                label="Focus"
+                score={focus}
+                accent="focus"
+                onClick={() => setSelectedPanel("energy")}
+              >
+                How much uninterrupted, usable attention the day gave you.
+              </SignalBar>
+
+              <SignalBar
+                label="Strain"
+                score={strain}
+                accent="strain"
+                onClick={() => setSelectedPanel("strains")}
+              >
+                How much load, friction and noise the day carried.
+              </SignalBar>
+
+              <SignalBar
+                label="Momentum"
+                score={momentum}
+                accent="momentum"
+                onClick={() => setSelectedPanel("wins")}
+              >
+                Whether the day built energy and progress or stalled.
+              </SignalBar>
+
+              <SignalBar
+                label="Consistency"
+                score={consistency}
+                accent="consistency"
+                onClick={() => setSelectedPanel("patterns")}
+              >
+                How similar this day is to your usual rhythm.
+              </SignalBar>
+            </div>
+          </div>
+
+          {/* Behavioural Summary */}
+          <div className="rounded-3xl border border-amber-500/50 bg-gradient-to-br from-amber-500/10 via-slate-950 to-slate-950 px-6 py-5 shadow-[0_0_50px_rgba(251,191,36,0.22)]">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <h2 className="text-xs font-semibold tracking-[0.22em] text-amber-200 uppercase">
+                  Behavioural summary
+                </h2>
+                <InfoTooltip label="In plain English">
+                  A short, human-readable description of how you actually
+                  worked today — derived from your meetings, email and Echo
+                  summaries.
+                </InfoTooltip>
+              </div>
+              <div className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-amber-100">
+                EchoJar · v1
               </div>
             </div>
 
-            {/* ring */}
-            <div className="pointer-events-none absolute inset-0 -z-10 rounded-full border border-[rgba(229,199,146,0.35)] blur-[0.5px]" />
+            <p className="mt-3 text-sm leading-relaxed text-amber-50/90">
+              {jar.behavioural_summary ||
+                "Echo is still forming a view of how you worked today."}
+            </p>
+          </div>
 
-            {/* arc bar under pill */}
-            <div className="mt-3 h-[3px] w-full rounded-full bg-slate-800/80">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-[#e5c792] via-[#f1d8a6] to-[#f9e8c8]"
-                style={{ width: `${focusPercent || 10}%` }}
+          {/* Themes & Patterns */}
+          <div className="rounded-3xl border border-slate-800 bg-slate-950/80 px-6 py-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <h2 className="text-xs font-semibold tracking-[0.22em] text-slate-300/90 uppercase">
+                  Themes & patterns
+                </h2>
+                <InfoTooltip label="What Echo sees">
+                  Themes are the labels Echo keeps seeing (admin, focus,
+                  meetings). Patterns are the behavioural loops it infers over
+                  time.
+                </InfoTooltip>
+              </div>
+              <button
+                onClick={() => setSelectedPanel("patterns")}
+                className="text-[11px] text-amber-200 underline underline-offset-4 hover:text-amber-100"
+              >
+                Open in detail panel
+              </button>
+            </div>
+
+            <div className="mt-3 grid gap-4 md:grid-cols-2">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                  Themes
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {themes.length === 0 && (
+                    <span className="rounded-full border border-slate-700/70 bg-slate-900/90 px-3 py-1 text-[11px] text-slate-400">
+                      None detected yet.
+                    </span>
+                  )}
+                  {themes.map((t) => (
+                    <span
+                      key={t}
+                      onClick={() => setSelectedPanel("themes")}
+                      className="cursor-pointer rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[11px] text-amber-100 hover:border-amber-400/70 hover:bg-amber-500/20"
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                  Patterns
+                </p>
+                <ul className="mt-2 space-y-1.5 text-xs text-slate-300">
+                  {patterns.length === 0 && (
+                    <li className="text-slate-500">
+                      Echo will start spotting patterns as more days accumulate.
+                    </li>
+                  )}
+                  {patterns.slice(0, 3).map((p, idx) => (
+                    <li key={idx} className="flex gap-2">
+                      <span className="mt-[3px] h-1 w-1 rounded-full bg-amber-400" />
+                      <span>{p}</span>
+                    </li>
+                  ))}
+                  {patterns.length > 3 && (
+                    <li className="text-[11px] text-slate-500">
+                      + {patterns.length - 3} more in the detail panel.
+                    </li>
+                  )}
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Actionable Blocks: Wins / Strains / Adjustments */}
+          <div className="rounded-3xl border border-slate-800 bg-slate-950/80 px-6 py-5 space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-xs font-semibold tracking-[0.22em] text-slate-300/90 uppercase">
+                Echo actions
+              </h2>
+              <InfoTooltip label="How to use this">
+                These blocks are not tasks. They&apos;re observations Echo
+                thinks are worth noticing so you can nudge how the next few days
+                feel.
+              </InfoTooltip>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <ActionCard
+                title="Wins"
+                items={recs.wins || []}
+                tone="win"
+                onClick={() => setSelectedPanel("wins")}
+              />
+              <ActionCard
+                title="Strains"
+                items={recs.strains || []}
+                tone="strain"
+                onClick={() => setSelectedPanel("strains")}
+              />
+              <ActionCard
+                title="Adjustments"
+                items={recs.adjustments || []}
+                tone="adjust"
+                onClick={() => setSelectedPanel("adjustments")}
               />
             </div>
           </div>
         </div>
-      </div>
-    </section>
+
+        {/* RIGHT COLUMN – DETAIL PANEL */}
+        <aside className="rounded-3xl border border-slate-800 bg-slate-950/90 px-5 py-5 shadow-[0_0_60px_rgba(15,23,42,0.8)]">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold tracking-[0.22em] text-slate-400 uppercase">
+                {activePanelTitle}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Click any card on the left to change what appears here.
+              </p>
+            </div>
+            <button
+              onClick={() => setSelectedPanel("none")}
+              className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-[11px] text-slate-300 hover:border-slate-500"
+            >
+              Clear
+            </button>
+          </div>
+
+          <div className="mt-4 border-t border-slate-800/80 pt-4 text-sm text-slate-200 space-y-3">
+            {renderDetailPanel(selectedPanel, jar)}
+          </div>
+        </aside>
+      </section>
+    </div>
   );
 }
 
-// --------------------------
-// Timeline list panel
-// --------------------------
+/* -------------------------------------------------------
+   Signal bar component with tooltip
+------------------------------------------------------- */
 
-function TimelinePanel({
-  entries,
-  selectedId,
-  onSelect,
-}: {
-  entries: EchoJarEntry[];
-  selectedId: string | null;
-  onSelect: (id: string) => void;
-}) {
-  return (
-    <section className="rounded-3xl border border-white/5 bg-slate-950/60 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.75)]">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-[0.22em] text-slate-500">
-            Timeline
-          </p>
-          <p className="text-xs text-slate-400">
-            Last {entries.length || 0} day
-            {entries.length === 1 ? "" : "s"} of your EchoJar.
-          </p>
-        </div>
-      </div>
-
-      <div className="divide-y divide-white/5">
-        {entries.map((entry) => (
-          <TimelineRow
-            key={entry.id}
-            entry={entry}
-            isActive={entry.id === selectedId}
-            onClick={() => onSelect(entry.id)}
-          />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function TimelineRow({
-  entry,
-  isActive,
+function SignalBar({
+  label,
+  score,
+  accent,
   onClick,
+  children,
 }: {
-  entry: EchoJarEntry;
-  isActive: boolean;
-  onClick: () => void;
+  label: string;
+  score: number | null;
+  accent: "focus" | "strain" | "momentum" | "consistency";
+  onClick?: () => void;
+  children?: React.ReactNode;
 }) {
-  const headline = deriveHeadline(entry);
-  const themes = entry.emerging_themes ?? [];
-  const focus = clampScore(entry.focus_score ?? null);
-  const load = clampScore(entry.strain_score ?? null); // using strain as "load" for now
-  const emailDrag = entry.raw_email?.length ?? 0;
-  const meetingNoise =
-    entry.predictive_signals?.attentionRisks?.length ?? null;
+  const safe = typeof score === "number" ? score : null;
+  const pct = safe !== null ? Math.max(0, Math.min(10, safe)) * 10 : 0;
+
+  const accentClass =
+    accent === "focus"
+      ? "from-amber-400 to-amber-200"
+      : accent === "strain"
+      ? "from-rose-500 to-amber-300"
+      : accent === "momentum"
+      ? "from-emerald-400 to-sky-300"
+      : "from-sky-400 to-amber-200";
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`group flex w-full items-start gap-3 rounded-2xl px-3 py-3 text-left transition
-        ${
-          isActive
-            ? "bg-gradient-to-r from-slate-900/90 to-slate-900/60 shadow-[0_0_30px_rgba(229,199,146,0.15)] border border-[rgba(229,199,146,0.4)]"
-            : "border border-transparent hover:border-[rgba(229,199,146,0.25)] hover:bg-slate-900/60 hover:shadow-[0_0_26px_rgba(229,199,146,0.12)]"
-        }`}
+      className="w-full text-left"
     >
-      {/* Date badge */}
-      <div className="mt-0.5 flex flex-col items-center">
-        <div className="rounded-full border border-[rgba(229,199,146,0.45)] bg-slate-950/90 px-3 py-1 text-[11px] font-medium text-[#f1d8a6] shadow-[0_0_18px_rgba(249,224,180,0.4)]">
-          {shortDateLabel(entry.date)}
-        </div>
-      </div>
-
-      {/* Text & chips */}
-      <div className="flex flex-1 flex-col gap-2">
-        <div className="flex items-center justify-between gap-2">
-          <p className="line-clamp-1 text-sm font-medium text-slate-50">
-            {headline}
-          </p>
-          <span className="hidden text-[10px] uppercase tracking-[0.18em] text-slate-500 md:inline">
-            View
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+            {label}
           </span>
+          <InfoTooltip label={label}>{children}</InfoTooltip>
         </div>
-
-        {themes.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {themes.slice(0, 3).map((theme) => (
-              <span
-                key={theme}
-                className="rounded-full border border-white/5 bg-slate-950/80 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-slate-300"
-              >
-                {theme}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* tiny pill metrics */}
-        <div className="mt-1 flex flex-wrap gap-1.5">
-          <MiniPill label="Focus" value={focus} />
-          <MiniPill label="Load" value={load} />
-          <MiniPill
-            label="Email drag"
-            value={emailDrag}
-            variant="count"
-          />
-          <MiniPill
-            label="Noise"
-            value={meetingNoise}
-            variant="count"
-          />
-        </div>
+        <span className="text-[11px] text-slate-300">
+          {safe !== null ? `${safe}/10` : "—"}
+        </span>
+      </div>
+      <div className="mt-2 h-2.5 rounded-full bg-slate-900/90">
+        <div
+          className={`h-full rounded-full bg-gradient-to-r ${accentClass} transition-all`}
+          style={{ width: `${pct}%` }}
+        />
       </div>
     </button>
   );
 }
 
-function MiniPill({
-  label,
-  value,
-  variant = "score",
+/* -------------------------------------------------------
+   Action cards – wins / strains / adjustments
+------------------------------------------------------- */
+
+function ActionCard({
+  title,
+  items,
+  tone,
+  onClick,
 }: {
-  label: string;
-  value: number | null | undefined;
-  variant?: "score" | "count";
+  title: string;
+  items: string[];
+  tone: "win" | "strain" | "adjust";
+  onClick?: () => void;
 }) {
-  const display =
-    value == null || Number.isNaN(value) ? "–" : value.toString();
+  const border =
+    tone === "win"
+      ? "border-emerald-400/60"
+      : tone === "strain"
+      ? "border-rose-400/60"
+      : "border-amber-400/60";
+
+  const bg =
+    tone === "win"
+      ? "bg-emerald-500/5"
+      : tone === "strain"
+      ? "bg-rose-500/5"
+      : "bg-amber-500/5";
+
+  const pillText =
+    tone === "win" ? "Momentum" : tone === "strain" ? "Load" : "Next moves";
 
   return (
-    <div className="inline-flex items-center gap-1 rounded-full border border-white/5 bg-slate-950/80 px-2 py-1 text-[10px] text-slate-300">
-      <span className="uppercase tracking-[0.14em] text-slate-500">
-        {label}
-      </span>
-      <span className="text-[11px] text-[#f1d8a6]">
-        {display}
-        {variant === "score" && display !== "–" ? "/10" : ""}
-      </span>
-    </div>
-  );
-}
-
-// --------------------------
-// Entry Detail (drawer card)
-// --------------------------
-
-function EntryDetail({ entry }: { entry: EchoJarEntry }) {
-  const headline = deriveHeadline(entry);
-  const tomorrowFocus = deriveTomorrowFocus(entry);
-  const recs = entry.recommendations ?? {};
-  const signals = entry.predictive_signals ?? {};
-
-  const focus = clampScore(entry.focus_score);
-  const load = clampScore(entry.strain_score);
-  const momentum = clampScore(entry.momentum_score);
-  const consistency = clampScore(entry.consistency_score);
-
-  return (
-    <div className="flex h-full flex-col gap-4">
-      {/* Header */}
-      <header className="space-y-1">
-        <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-500">
-          Entry
-        </p>
-        <h2 className="text-lg font-semibold text-slate-50">
-          {headline}
-        </h2>
-        <p className="text-xs text-slate-400">{formatDate(entry.date)}</p>
-      </header>
-
-      {/* Day story */}
-      {entry.behavioural_summary && (
-        <section className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-            day_story
-          </p>
-          <p className="text-sm leading-relaxed text-slate-200">
-            {entry.behavioural_summary}
-          </p>
-        </section>
-      )}
-
-      {/* Wins / Strains */}
-      {(recs.wins?.length || recs.strains?.length) && (
-        <section className="space-y-3 border-t border-white/5 pt-3">
-          {recs.wins?.length ? (
-            <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Wins
-              </p>
-              <ul className="space-y-1.5 text-sm text-slate-200">
-                {recs.wins.map((w, idx) => (
-                  <li key={idx} className="flex gap-2">
-                    <span className="mt-[6px] h-[3px] w-[3px] rounded-full bg-[#f1d8a6]" />
-                    <span>{w}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
-          {recs.strains?.length ? (
-            <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Strains
-              </p>
-              <ul className="space-y-1.5 text-sm text-slate-200">
-                {recs.strains.map((s, idx) => (
-                  <li key={idx} className="flex gap-2">
-                    <span className="mt-[6px] h-[3px] w-[3px] rounded-full bg-slate-500" />
-                    <span>{s}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </section>
-      )}
-
-      {/* Themes */}
-      {entry.emerging_themes?.length ? (
-        <section className="space-y-2 border-t border-white/5 pt-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-            Themes
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {entry.emerging_themes.map((theme) => (
-              <span
-                key={theme}
-                className="rounded-full border border-[rgba(229,199,146,0.4)] bg-slate-950/80 px-2.5 py-1 text-[11px] uppercase tracking-[0.16em] text-slate-100"
-              >
-                {theme}
-              </span>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {/* Signals */}
-      <section className="space-y-2 border-t border-white/5 pt-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-          Signals
-        </p>
-        <div className="space-y-2">
-          <SignalRow label="Focus" score={focus} />
-          <SignalRow label="Load" score={load} />
-          <SignalRow label="Momentum" score={momentum} />
-          <SignalRow label="Consistency" score={consistency} />
-        </div>
-      </section>
-
-      {/* Tomorrow focus */}
-      <section className="space-y-2 border-t border-white/5 pt-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-          Tomorrow, Echo suggests…
-        </p>
-        <p className="text-sm leading-relaxed text-slate-200">
-          {tomorrowFocus}
-        </p>
-      </section>
-
-      {/* Attention risks / energy map */}
-      {(signals.attentionRisks?.length || signals.energyMap) && (
-        <section className="space-y-3 border-t border-white/5 pt-3">
-          {signals.attentionRisks?.length ? (
-            <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Attention risks
-              </p>
-              <ul className="space-y-1.5 text-sm text-slate-200">
-                {signals.attentionRisks.map((r, idx) => (
-                  <li key={idx} className="flex gap-2">
-                    <span className="mt-[6px] h-[3px] w-[3px] rounded-full bg-red-400/80" />
-                    <span>{r}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
-          {signals.energyMap && (
-            <div className="space-y-1.5">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Energy map
-              </p>
-              <div className="space-y-1.5 text-xs text-slate-200">
-                {Object.entries(signals.energyMap).map(
-                  ([slot, desc]) => (
-                    <div
-                      key={slot}
-                      className="flex items-start justify-between gap-2 rounded-xl bg-slate-950/70 px-2.5 py-1.5"
-                    >
-                      <span className="text-[11px] font-medium text-[#f1d8a6]">
-                        {slot}
-                      </span>
-                      <span className="text-[11px] text-slate-300">
-                        {desc}
-                      </span>
-                    </div>
-                  ),
-                )}
-              </div>
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* small footer */}
-      <footer className="mt-3 border-t border-white/5 pt-2">
-        <p className="text-[10px] text-slate-500">
-          Read-only. Calm. Echo keeps the memory so you can keep the
-          momentum.
-        </p>
-      </footer>
-    </div>
-  );
-}
-
-function SignalRow({
-  label,
-  score,
-}: {
-  label: string;
-  score: number | null;
-}) {
-  const percent = scoreToPercent(score);
-  return (
-    <div className="flex items-center gap-2">
-      <span className="w-24 text-[11px] uppercase tracking-[0.16em] text-slate-500">
-        {label}
-      </span>
-      <div className="flex-1 rounded-full bg-slate-900/80">
-        <div
-          className="h-1.5 rounded-full bg-gradient-to-r from-[#e5c792] via-[#f1d8a6] to-[#f9e8c8]"
-          style={{ width: `${percent || 6}%` }}
-        />
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group flex h-full flex-col rounded-2xl border px-4 py-3 text-left ${border} ${bg} hover:border-amber-400/80 hover:bg-slate-900/80 transition-colors`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium text-slate-100">{title}</span>
+        <span className="rounded-full border border-slate-600/70 bg-slate-900/80 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-slate-400">
+          {pillText}
+        </span>
       </div>
-      <span className="w-8 text-right text-[11px] text-slate-200">
-        {score == null ? "–" : `${score}/10`}
-      </span>
+      <ul className="mt-2 space-y-1.5 text-[11px] text-slate-300">
+        {items.length === 0 && (
+          <li className="text-slate-500">Nothing obvious here today.</li>
+        )}
+        {items.slice(0, 3).map((item, idx) => (
+          <li key={idx} className="flex gap-2">
+            <span className="mt-[3px] h-1 w-1 rounded-full bg-amber-400 group-hover:bg-amber-300" />
+            <span>{item}</span>
+          </li>
+        ))}
+        {items.length > 3 && (
+          <li className="text-[10px] text-slate-500">
+            + {items.length - 3} more in detail panel.
+          </li>
+        )}
+      </ul>
+    </button>
+  );
+}
+
+/* -------------------------------------------------------
+   Detail panel renderer
+------------------------------------------------------- */
+
+function renderDetailPanel(panel: SelectedPanel, jar: EchoJarRow) {
+  const recs = jar.recommendations || {};
+  const signals = jar.predictive_signals || {};
+  const themes = jar.emerging_themes || [];
+  const patterns = jar.detected_patterns || [];
+
+  if (panel === "none") {
+    return (
+      <p className="text-sm text-slate-400">
+        Start by clicking a signal, theme, pattern or action card on the left.
+        EchoJar will open a deeper view here without cluttering the main page.
+      </p>
+    );
+  }
+
+  if (panel === "wins") {
+    const wins = recs.wins || [];
+    return (
+      <DetailList
+        title="Today’s wins"
+        items={wins}
+        empty="Echo didn’t detect clear wins yet — as more summaries arrive, this will fill in."
+      />
+    );
+  }
+
+  if (panel === "strains") {
+    const strains = recs.strains || [];
+    return (
+      <DetailList
+        title="Strains and friction"
+        items={strains}
+        empty="No obvious strains detected. On heavy days, this will highlight what’s quietly draining you."
+      />
+    );
+  }
+
+  if (panel === "adjustments") {
+    const adj = recs.adjustments || [];
+    return (
+      <DetailList
+        title="Suggested adjustments"
+        items={adj}
+        empty="Echo will start proposing tiny adjustments once it sees a few days of repeated patterns."
+      />
+    );
+  }
+
+  if (panel === "patterns") {
+    return (
+      <DetailList
+        title="Behavioural patterns Echo sees"
+        items={patterns}
+        empty="Patterns emerge across multiple days. Once Echo has enough data, it will describe the loops it keeps seeing."
+      />
+    );
+  }
+
+  if (panel === "themes") {
+    return (
+      <DetailList
+        title="Themes Echo is tracking"
+        items={themes}
+        empty="Themes will start to appear as Echo sees repeated kinds of work — admin, deep work, meetings, comms and more."
+      />
+    );
+  }
+
+  if (panel === "energy") {
+    const map = signals.energyMap || {};
+    const entries = Object.entries(map);
+    return (
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium text-slate-100">Energy map</h3>
+        {entries.length === 0 ? (
+          <p className="text-sm text-slate-400">
+            Echo hasn&apos;t mapped today&apos;s energy curve yet. Once more
+            days accumulate, this will show where you naturally run hottest.
+          </p>
+        ) : (
+          <ul className="mt-1 space-y-1.5 text-sm text-slate-200">
+            {entries.map(([block, desc]) => (
+              <li key={block} className="flex gap-3">
+                <span className="min-w-[96px] text-[11px] font-medium uppercase tracking-[0.16em] text-amber-200">
+                  {block}
+                </span>
+                <span className="text-slate-200">{desc}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {signals.focusOutlook && (
+          <p className="mt-3 text-xs text-slate-400">
+            Focus outlook:{" "}
+            <span className="text-slate-200">{signals.focusOutlook}</span>
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  if (panel === "attention") {
+    const risks = signals.attentionRisks || [];
+    return (
+      <DetailList
+        title="Attention risks"
+        items={risks}
+        empty="When Echo sees repeated sources of drag or distraction, they’ll appear here."
+      />
+    );
+  }
+
+  if (panel === "raw") {
+    return (
+      <div className="space-y-2 text-xs text-slate-300">
+        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+          Raw JSON snapshot
+        </p>
+        <pre className="max-h-80 overflow-auto rounded-xl bg-slate-950/90 p-3 text-[11px] leading-relaxed text-slate-300">
+          {JSON.stringify(jar, null, 2)}
+        </pre>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+/* -------------------------------------------------------
+   Simple detail list component
+------------------------------------------------------- */
+
+function DetailList({
+  title,
+  items,
+  empty,
+}: {
+  title: string;
+  items: string[];
+  empty: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-medium text-slate-100">{title}</h3>
+      {items.length === 0 ? (
+        <p className="text-sm text-slate-400">{empty}</p>
+      ) : (
+        <ul className="mt-1 space-y-1.5 text-sm text-slate-200">
+          {items.map((item, idx) => (
+            <li key={idx} className="flex gap-2">
+              <span className="mt-[5px] h-1.5 w-1.5 rounded-full bg-amber-400" />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
+  );
+}
+
+/* -------------------------------------------------------
+   Tiny tooltip component
+------------------------------------------------------- */
+
+function InfoTooltip({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <span
+      className="relative inline-flex items-center"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <span className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-600 bg-slate-900 text-[9px] font-semibold text-slate-300 hover:border-amber-400 hover:text-amber-200">
+        i
+      </span>
+      {open && (
+        <div className="absolute left-1/2 top-6 z-20 w-64 -translate-x-1/2 rounded-xl border border-slate-700 bg-slate-950/95 px-3 py-2 text-[11px] text-slate-200 shadow-[0_15px_50px_rgba(0,0,0,0.7)]">
+          <p className="font-semibold text-[10px] uppercase tracking-[0.16em] text-amber-300">
+            {label}
+          </p>
+          <p className="mt-1 text-[11px] text-slate-200">{children}</p>
+        </div>
+      )}
+    </span>
   );
 }
