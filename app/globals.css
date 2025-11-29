@@ -2,86 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Base page styling */
 html,
 body {
-  @apply min-h-screen text-white scroll-smooth;
+  @apply min-h-screen scroll-smooth text-white bg-[#0B0E1A];
 }
 
-/* Background – deep navy, subtle glow */
-body {
-  @apply bg-slate-950 text-slate-100 antialiased;
-  background:
-    radial-gradient(circle at top left, rgba(148, 163, 184, 0.18), transparent 55%),
-    radial-gradient(circle at bottom right, rgba(30, 64, 175, 0.45), transparent 65%),
-    #020617;
-}
-
-/* Scrollbar */
+/* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
 }
+
 ::-webkit-scrollbar-thumb {
-  background-color: theme('colors.purple.700');
+  /* EchoJar gold accent */
+  background-color: #e8c07a;
   border-radius: 4px;
 }
 
-/* EchoJar helpers */
-
-.jar-card {
-  @apply rounded-3xl border border-slate-800/80 bg-slate-950/70 backdrop-blur-xl;
-  box-shadow:
-    0 26px 80px rgba(15, 23, 42, 0.98),
-    0 0 40px rgba(248, 250, 252, 0.02);
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.jar-subcard {
-  @apply rounded-2xl border border-slate-800/60 bg-slate-950/70;
+/* Smooth card glow consistent with your design */
+.card-glow {
+  background: radial-gradient(
+    circle at top left,
+    rgba(255, 220, 160, 0.08),
+    transparent 65%
+  );
 }
 
-.jar-chip {
-  @apply inline-flex items-center rounded-full border border-slate-700/70 bg-slate-900/80
-    px-3 py-1 text-xs font-medium tracking-wide text-slate-200;
+/* Soft dividers matching the UI */
+.divider {
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
-.jar-pill {
-  @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-medium
-    border border-slate-700/70 bg-slate-900/60 text-slate-300;
-}
-
-.jar-pill-active {
-  @apply border-amber-400/80 text-amber-300 bg-amber-400/10;
-  box-shadow:
-    0 0 0 1px rgba(250, 204, 21, 0.35),
-    0 0 26px rgba(251, 191, 36, 0.4);
-}
-
-.jar-section-label {
-  @apply text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400;
-}
-
-.jar-mono-label {
-  @apply font-mono text-[11px] uppercase tracking-[0.22em] text-slate-500;
-}
-
-.jar-gold {
-  color: #facc6b;
-}
-
-.jar-gold-soft-bg {
-  background: radial-gradient(circle at top, rgba(250, 204, 21, 0.18), transparent 65%);
-}
-
-.jar-meter-track {
-  @apply h-1.5 w-full rounded-full bg-slate-800/90;
-}
-
-.jar-meter-fill {
-  @apply h-1.5 rounded-full bg-gradient-to-r from-amber-300 via-amber-400 to-amber-200;
-}
-
-/* Tooltip */
-.jar-tooltip-panel {
-  @apply pointer-events-none absolute left-1/2 top-full z-40 mt-3 hidden
-    w-64 -translate-x-1/2 rounded-2xl bg-slate-900/95 p-3 text-xs text-slate-200
-    shadow-xl ring-1 ring-slate-700/80 group-hover:block;
+/* Tooltip styling for EchoJar hints */
+.tooltip-content {
+  @apply text-sm text-gray-300 bg-[#10131F] border border-gray-800 px-3 py-2 rounded-md shadow-xl;
 }
