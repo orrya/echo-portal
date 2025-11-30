@@ -41,7 +41,7 @@ type Snapshot = {
   calendar_insights?: CalendarInsights | null;
   day_timeline?: TimelineItem[] | null;
 
-  // Tomorrow
+  // Tomorrow-specific (when used for tomorrowSnapshot)
   flaggedMeetings?: any[];
   deepWorkWindows?: any[];
   forecast?: any;
@@ -59,8 +59,9 @@ export default function CalendarClient({
   snapshot: Snapshot | null;
   tomorrowSnapshot: Snapshot | null;
 }) {
-  const [selectedMeeting, setSelectedMeeting] =
-    useState<TimelineItem | null>(null);
+  const [selectedMeeting, setSelectedMeeting] = useState<TimelineItem | null>(
+    null
+  );
   const [defendLoadingKey, setDefendLoadingKey] = useState<string | null>(null);
 
   /* ---------------------------------------------------------
@@ -112,7 +113,7 @@ export default function CalendarClient({
   const showBreakHint = meetingMinutes >= 120 && deepWork.length > 0;
 
   /* ---------------------------------------------------------
-     FLAGGING LOGIC
+     HELPER: FLAG MEETINGS THAT SHOULD NOT EXIST
   --------------------------------------------------------- */
 
   const flaggedMeetings = timeline.filter((m) =>
@@ -155,7 +156,7 @@ export default function CalendarClient({
   }
 
   /* ---------------------------------------------------------
-     TOMORROW UI
+     PREMIUM TOMORROW BANNER (colour-coded)
   --------------------------------------------------------- */
 
   const tomorrowDateLabel = tomorrowSnapshot?.date
@@ -187,11 +188,14 @@ export default function CalendarClient({
   return (
     <div className="mx-auto max-w-6xl px-6 py-14 space-y-16">
       {/* -----------------------------------------------------
-         TOMORROW BANNER
+         TOMORROW BANNER (top of page, world-class UI)
       ----------------------------------------------------- */}
       {tomorrowSnapshot && (
         <section className="rounded-3xl border border-slate-800 bg-slate-950/80 shadow-[0_0_60px_rgba(15,23,42,0.8)] overflow-hidden">
-          <div className={`h-1.5 w-full bg-gradient-to-r ${tomorrowGradient}`} />
+          {/* Gradient strip */}
+          <div
+            className={`h-1.5 w-full bg-gradient-to-r ${tomorrowGradient}`}
+          />
 
           <div className="px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
@@ -289,35 +293,28 @@ export default function CalendarClient({
       </section>
 
       {/* -----------------------------------------------------
-         TODAY — METRICS BAR (with tooltips added)
+         TODAY — METRICS BAR
       ----------------------------------------------------- */}
       <section className="flex flex-wrap gap-3">
         <MetricChip
           label="Focus capacity"
           value={`${workAbility}%`}
           subtitle={loadLabel}
-          tooltip="How much of today’s time is realistically usable for deep work after accounting for meetings, gaps and disruptions."
         />
-
         <MetricChip
           label="Time booked"
           value={`${meetingCount} meetings`}
           subtitle={`${meetingMinutes} min`}
-          tooltip="Total meeting time on your calendar today, including short standups, handovers and 1:1s."
         />
-
         <MetricChip
           label="Day fractures"
           value={fractures}
           subtitle={`${fractureMinutes} min lost`}
-          tooltip="How many times your day is chopped into unusable fragments — and how many minutes those tiny gaps cost you."
         />
-
         <MetricChip
           label="Switch cost"
           value={switches}
           subtitle={`${switchCost} min tax`}
-          tooltip="How much time is lost jumping between tasks or contexts. More switches = more attention tax."
         />
       </section>
 
@@ -383,9 +380,7 @@ export default function CalendarClient({
                       onClick={() => handleDefendBlock(w)}
                       disabled={isLoading}
                     >
-                      {isLoading
-                        ? "Defending this block…"
-                        : "Defend this block"}
+                      {isLoading ? "Defending this block…" : "Defend this block"}
                     </button>
                   </div>
                 );
@@ -400,8 +395,9 @@ export default function CalendarClient({
             )}
           </div>
 
-          {/* Noise / Follow-up */}
+          {/* Noise & Follow-Up */}
           <div className="rounded-3xl border border-slate-800 bg-slate-950/70 px-5 py-5">
+            {/* Meetings That Should Not Exist */}
             <h3 className="text-[11px] font-semibold tracking-[0.2em] uppercase text-red-300/80 mt-4">
               Meetings that should not exist (experimental)
             </h3>
@@ -453,7 +449,7 @@ export default function CalendarClient({
               })}
             </div>
 
-            {/* Follow-Up */}
+            {/* Follow-Up Heavy (existing behaviour) */}
             {followUp.length > 0 && (
               <>
                 <h3 className="text-xs tracking-[0.2em] uppercase text-red-300 mt-8">
@@ -485,7 +481,7 @@ export default function CalendarClient({
       </section>
 
       {/* -----------------------------------------------------
-         TOMORROW (full snapshot)
+         🔮 FULL TOMORROW SNAPSHOT (REAL DATA FROM SUPABASE)
       ----------------------------------------------------- */}
       <section className="rounded-3xl border border-sky-800 bg-slate-900/60 px-6 py-10 shadow-[0_0_70px_rgba(14,165,233,0.3)]">
         <h2 className="text-xs font-semibold tracking-[0.22em] text-sky-300 uppercase">
@@ -514,32 +510,17 @@ export default function CalendarClient({
             <div className="flex flex-wrap gap-3">
               <MetricChip
                 label="Focus capacity"
-                value={`${
-                  tomorrowSnapshot.calendarInsights?.workAbility ?? 0
-                }%`}
-                tooltip="Echo’s estimate of how much usable focus time tomorrow will realistically offer."
+                value={`${tomorrowSnapshot.calendarInsights?.workAbility ?? 0}%`}
               />
-
               <MetricChip
                 label="Meetings"
-                value={`${
-                  tomorrowSnapshot.calendarInsights?.meetingCount ?? 0
-                }`}
-                subtitle={`${
-                  tomorrowSnapshot.calendarInsights?.meetingLoadMinutes ?? 0
-                } min`}
-                tooltip="How much of tomorrow is already spoken for by meetings."
+                value={`${tomorrowSnapshot.calendarInsights?.meetingCount ?? 0}`}
+                subtitle={`${tomorrowSnapshot.calendarInsights?.meetingLoadMinutes ?? 0} min`}
               />
-
               <MetricChip
                 label="Fragments"
-                value={`${
-                  tomorrowSnapshot.calendarInsights?.fragments ?? 0
-                }`}
-                subtitle={`${
-                  tomorrowSnapshot.calendarInsights?.lostFragmentMinutes ?? 0
-                } min lost`}
-                tooltip="How broken up tomorrow appears — many tiny gaps create structural drag."
+                value={`${tomorrowSnapshot.calendarInsights?.fragments ?? 0}`}
+                subtitle={`${tomorrowSnapshot.calendarInsights?.lostFragmentMinutes ?? 0} min lost`}
               />
             </div>
 
@@ -556,11 +537,9 @@ export default function CalendarClient({
                   </p>
                 )}
 
-                {tomorrowSnapshot.deepWorkWindows?.map(
-                  (w: any, i: number) => (
-                    <DeepWorkCard key={i} window={w} />
-                  )
-                )}
+                {tomorrowSnapshot.deepWorkWindows?.map((w: any, i: number) => (
+                  <DeepWorkCard key={i} window={w} />
+                ))}
               </div>
             </div>
 
@@ -618,7 +597,7 @@ export default function CalendarClient({
       </section>
 
       {/* -----------------------------------------------------
-         MEETING DETAIL MODAL
+         MODAL
       ----------------------------------------------------- */}
       {selectedMeeting && (
         <MeetingDetailModal
@@ -631,25 +610,20 @@ export default function CalendarClient({
 }
 
 /* ---------------------------------------------------------
-   COMPONENTS
+   COMPONENTS & HELPERS
 --------------------------------------------------------- */
 
 function MetricChip({
   label,
   value,
   subtitle,
-  tooltip,
 }: {
   label: string;
   value: string | number;
   subtitle?: string;
-  tooltip?: string;
 }) {
   return (
-    <div
-      className="rounded-full border border-slate-700/80 bg-slate-900/70 px-4 py-2 text-xs text-slate-200 flex items-center gap-2"
-      title={tooltip}
-    >
+    <div className="rounded-full border border-slate-700/80 bg-slate-900/70 px-4 py-2 text-xs text-slate-200 flex items-center gap-2">
       <span className="uppercase tracking-[0.18em] text-[10px] text-slate-400">
         {label}
       </span>
@@ -818,10 +792,7 @@ function MeetingDetailModal({
    FLAGGING LOGIC
 --------------------------------------------------------- */
 
-function shouldFlagMeeting(
-  meeting: TimelineItem,
-  deepWork: DeepWorkWindow[]
-) {
+function shouldFlagMeeting(meeting: TimelineItem, deepWork: DeepWorkWindow[]) {
   const highNoise = (meeting.noiseScore ?? 0) >= 5;
   const tooManyAttendees = meeting.attendees >= 5;
   const veryShort = meeting.minutes <= 30;
@@ -866,7 +837,7 @@ function deepWorkOverlap(m: TimelineItem, deep: DeepWorkWindow[]) {
 }
 
 /* ---------------------------------------------------------
-   TODAY RENDER TEXT
+   TODAY RENDER HELPER
 --------------------------------------------------------- */
 
 function renderTodayWorkStory(workAbility: number) {
@@ -883,7 +854,7 @@ function renderTodayWorkStory(workAbility: number) {
 }
 
 /* ---------------------------------------------------------
-   TIME FORMAT
+   UTIL
 --------------------------------------------------------- */
 
 function formatTime(iso: string) {
