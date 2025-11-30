@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 import DashboardSubscription from "./dashboard-subscription";
 import { Zap, Mail, Bell } from "lucide-react";
+import { PersonaCard, Persona } from "@/components/echojar/PersonaCard";
 
 // -------- TYPES --------
 type DailySummaryRow = {
@@ -23,29 +24,22 @@ type EmailRecordRow = {
   Summary?: string | null;
 };
 
-// Calendar snapshot (loosely typed to stay robust)
+type CalendarInsights = {
+  workAbility?: number | null;
+};
+
 type CalendarSnapshotRow = {
   date: string;
-  calendarInsights?: any | null;
-  calendar_insights?: any | null;
+  calendarInsights?: CalendarInsights | null;
+  calendar_insights?: CalendarInsights | null;
 };
 
-// EchoJar daily row (loosely typed)
 type EchoJarRow = {
-  id: string;
   date: string;
-  behavioural_summary?: string | null;
-  focus_score?: number | null;
-  strain_score?: number | null;
-  momentum_score?: number | null;
-  consistency_score?: number | null;
-  predictive_signals?: any;
-  raw_email?: any;
-  raw_calendar?: any;
-  tags?: any;
+  persona_label?: string | null;
+  persona_headline?: string | null;
+  persona_summary?: string | null;
 };
-
-// -------- SMALL HELPERS --------
 
 function parseJsonArray(value: any): string[] {
   if (!value) return [];
@@ -82,148 +76,32 @@ function parseMetrics(value: any): {
   return {};
 }
 
-function formatTime(iso: string) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+/* ---------------------------------------------------------
+   WORK STORY HELPER (same logic as calendar page)
+--------------------------------------------------------- */
+function renderTodayWorkStory(workAbility: number | null) {
+  const w = workAbility ?? 0;
 
-// Same story logic as CalendarClient, so the language stays consistent
-function renderTodayWorkStory(workAbility: number) {
-  if (workAbility > 75)
+  if (w > 75)
     return "Today is steady and spacious, with healthy pockets of clarity to lean into.";
-
-  if (workAbility > 60)
+  if (w > 60)
     return "The morning is a little fractured but the afternoon clears; focus remains workable.";
-
-  if (workAbility > 45)
+  if (w > 45)
     return "The day is mixed — meetings and gaps are interleaved, so focus will need protection.";
-
   return "Today is structurally noisy with limited uninterrupted time — small, deliberate wins matter most.";
 }
 
-// Echo persona helper (lightweight version of the EchoJar persona logic)
-function derivePersonaFromScores(
-  focus: number | null | undefined,
-  strain: number | null | undefined,
-  momentum: number | null | undefined
-) {
-  const f = focus ?? 0;
-  const s = strain ?? 0;
-  const m = momentum ?? 0;
-
-  if (f >= 7 && s <= 4) {
-    return {
-      id: "deep-operator",
-      label: "Deep Operator",
-      headline: "Your day is built for deep work.",
-      summary:
-        "Focus windows stay clean and meetings aren’t overwhelming. Echo sees a pattern of deliberate work and low fragmentation.",
-    };
-  }
-
-  if (s >= 7 && f <= 5) {
-    return {
-      id: "load-bearer",
-      label: "Load Bearer",
-      headline: "You’re carrying a heavy operational load.",
-      summary:
-        "Calendar and email drag are eating into focus. Echo flags this pattern as structurally noisy and energy intensive.",
-    };
-  }
-
-  if (m >= 6 && f >= 5) {
-    return {
-      id: "builder",
-      label: "Momentum Builder",
-      headline: "You’re steadily compounding progress.",
-      summary:
-        "Days aren’t perfectly clean, but important work keeps moving forward. Echo sees momentum building across your week.",
-    };
-  }
-
-  return {
-    id: "recalibrating",
-    label: "Recalibrating",
-    headline: "Today’s pattern is still settling.",
-    summary:
-      "Signals are mixed — some focus, some drag. Echo treats this as a calibration day rather than a strong pattern.",
-  };
+function getTomorrowOutlookLabel(workAbility: number | null) {
+  if (workAbility == null) return "Outlook still forming";
+  if (workAbility >= 75) return "⚡ High clarity day";
+  if (workAbility >= 55) return "Balanced, workable load";
+  if (workAbility >= 40) return "Heavy but manageable";
+  return "Structurally noisy day";
 }
 
-// Very defensive JSON parser for EchoJar internals
-function parseJson<T = any>(value: any, fallback: T): T {
-  if (value == null) return fallback;
-  if (Array.isArray(value) || typeof value === "object") return value as T;
-  if (typeof value === "string") {
-    try {
-      return JSON.parse(value) as T;
-    } catch {
-      return fallback;
-    }
-  }
-  return fallback;
-}
-
-// Same time-saved estimation as EchoJar, trimmed for safety
-function computeTimeSaved(entry: EchoJarRow | null) {
-  if (!entry) {
-    return { total: 0, breakdown: null as any };
-  }
-
-  const rawEmail = parseJson<any[]>(entry.raw_email, []);
-  const rawCalendar = parseJson<any>(entry.raw_calendar, {});
-
-  // 1) Action-like emails → 45s each
-  const actionEmails = rawEmail.filter((e) => {
-    const category = (e?.Category || "").toLowerCase();
-    const theme = (e?.theme || "").toLowerCase();
-    return (
-      category === "action" ||
-      category === "urgent" ||
-      theme === "action" ||
-      theme === "followup"
-    );
-  }).length;
-  const emailMinutes = (actionEmails * 45) / 60;
-
-  // 2) Meeting load → assume 20% protected / avoided / shortened
-  const today = rawCalendar?.today || {};
-  const calInsights = today?.calendar_insights || today?.calendarInsights || {};
-  const meetingMinutes = Number(calInsights.meetingMinutes ?? 0);
-  const meetingSaved = meetingMinutes * 0.2;
-
-  // 3) High-energy deep blocks from predictive_signals.energyMap → 10 min each
-  const signals = parseJson<any>(entry.predictive_signals, {});
-  const energyMap = signals.energyMap || {};
-  const deepBlocks = Object.values<string | unknown>(energyMap).filter((v) =>
-    typeof v === "string"
-      ? v.toLowerCase().startsWith("high") &&
-        !v.toLowerCase().includes("meeting")
-      : false
-  ).length;
-  const deepMinutes = deepBlocks * 10;
-
-  const total = Math.round(emailMinutes + meetingSaved + deepMinutes);
-
-  return {
-    total,
-    breakdown: {
-      actionEmails,
-      emailMinutes: Math.round(emailMinutes),
-      meetingMinutes,
-      meetingSaved: Math.round(meetingSaved),
-      deepBlocks,
-      deepMinutes,
-    },
-  };
-}
-
-// -------- MAIN PAGE --------
+/* =========================================================
+   MAIN DASHBOARD PAGE
+========================================================= */
 
 export default async function DashboardPage() {
   const user = await getUser();
@@ -251,7 +129,14 @@ export default async function DashboardPage() {
     }
   );
 
-  // -------- SUMMARY STATUS --------
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const tomorrowStr = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
+  /* -------------------------------------------------------
+     SUMMARY STATUS
+  ------------------------------------------------------- */
   const { data: summaryRowsRaw } = await supabase
     .from("daily_summaries")
     .select("*")
@@ -259,8 +144,6 @@ export default async function DashboardPage() {
     .order("Date", { ascending: false });
 
   const summaryRows = (summaryRowsRaw ?? []) as DailySummaryRow[];
-
-  const todayStr = new Date().toISOString().slice(0, 10);
 
   const todayAM = summaryRows.find(
     (r) =>
@@ -279,67 +162,19 @@ export default async function DashboardPage() {
   const latestSummary = summaryRows[0];
   const latestThemes = latestSummary ? parseJsonArray(latestSummary.themes) : [];
   const latestWins = latestSummary ? parseJsonArray(latestSummary.wins) : [];
-  const latestMetrics = latestSummary
-    ? parseMetrics(latestSummary.metrics)
-    : {};
+  const latestMetrics = latestSummary ? parseMetrics(latestSummary.metrics) : {};
+  const latestReflection = (latestSummary?.reflection || "").trim();
 
-  // -------- CALENDAR SNAPSHOT (for Today's Work Story card) --------
-  const { data: calendarRowsRaw } = await supabase
-    .from("calendar_snapshots")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("date", { ascending: false })
-    .limit(2);
+  // Short preview for calm UI (Option A)
+  const maxSummaryChars = 260;
+  const summaryIsLong = latestReflection.length > maxSummaryChars;
+  const summaryPreview = summaryIsLong
+    ? latestReflection.slice(0, maxSummaryChars).trimEnd() + "…"
+    : latestReflection;
 
-  const calendarRows = (calendarRowsRaw ?? []) as CalendarSnapshotRow[];
-  const todayCalendar = calendarRows[0] ?? null;
-
-  const calendarInsights =
-    todayCalendar?.calendarInsights ??
-    todayCalendar?.calendar_insights ??
-    null;
-
-  const workAbilityToday: number | null =
-    calendarInsights?.workAbility ?? null;
-
-  const deepWorkWindows =
-    calendarInsights?.deepWorkWindows && Array.isArray(calendarInsights.deepWorkWindows)
-      ? calendarInsights.deepWorkWindows
-      : [];
-
-  const primaryDeepStart =
-    deepWorkWindows.length > 0 && deepWorkWindows[0]?.start
-      ? formatTime(deepWorkWindows[0].start)
-      : null;
-
-  const todayWorkStory =
-    typeof workAbilityToday === "number"
-      ? renderTodayWorkStory(workAbilityToday)
-      : null;
-
-  // -------- ECHOJAR SNAPSHOT (for Echo Signals card) --------
-  const { data: echoRowsRaw } = await supabase
-    .from("echojar_daily")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("date", { ascending: false })
-    .limit(1);
-
-  const latestEcho: EchoJarRow | null =
-    (echoRowsRaw?.[0] as EchoJarRow | undefined) ?? null;
-
-  const focusScore = latestEcho?.focus_score ?? null;
-  const strainScore = latestEcho?.strain_score ?? null;
-  const momentumScore = latestEcho?.momentum_score ?? null;
-  const consistencyScore = latestEcho?.consistency_score ?? null;
-
-  const echoPersona = latestEcho
-    ? derivePersonaFromScores(focusScore, strainScore, momentumScore)
-    : null;
-
-  const echoTimeSaved = computeTimeSaved(latestEcho);
-
-  // -------- EMAIL BANDS --------
+  /* -------------------------------------------------------
+     EMAIL BANDS
+  ------------------------------------------------------- */
   const { data: emailsRaw } = await supabase
     .from("email_records")
     .select('Category,"Email Status","Date Received",Subject,From,Summary')
@@ -392,7 +227,97 @@ export default async function DashboardPage() {
 
   const isConnected = emails.length > 0;
 
-  // -------- RENDER --------
+  /* -------------------------------------------------------
+     CALENDAR SNAPSHOTS (for Work Story + Tomorrow Outlook)
+  ------------------------------------------------------- */
+  const { data: calendarRowsRaw } = await supabase
+    .from("calendar_snapshots")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("date", { ascending: false })
+    .limit(6);
+
+  const calendarRows = (calendarRowsRaw ?? []) as CalendarSnapshotRow[];
+
+  const todaySnapshot = calendarRows.find((r) =>
+    r.date?.startsWith(todayStr)
+  );
+  const tomorrowSnapshot = calendarRows.find((r) =>
+    r.date?.startsWith(tomorrowStr)
+  );
+
+  const todayInsights =
+    todaySnapshot?.calendarInsights ?? todaySnapshot?.calendar_insights ?? null;
+  const todayWorkAbility =
+    typeof todayInsights?.workAbility === "number"
+      ? todayInsights.workAbility
+      : null;
+
+  const tomorrowInsights =
+    tomorrowSnapshot?.calendarInsights ??
+    tomorrowSnapshot?.calendar_insights ??
+    null;
+  const tomorrowWorkAbility =
+    typeof tomorrowInsights?.workAbility === "number"
+      ? tomorrowInsights.workAbility
+      : null;
+
+  /* -------------------------------------------------------
+     ECHOJAR — PERSONA + PREVIEW
+  ------------------------------------------------------- */
+  const { data: echoJarRowsRaw } = await supabase
+    .from("echojar_daily")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("date", { ascending: false })
+    .limit(1);
+
+  const echoJarRow = (echoJarRowsRaw ?? [])[0] as EchoJarRow | undefined;
+
+  const persona: Persona =
+    echoJarRow && echoJarRow.persona_label
+      ? {
+          label: echoJarRow.persona_label,
+          headline:
+            echoJarRow.persona_headline ||
+            "Your day is built for deliberate work.",
+          summary:
+            echoJarRow.persona_summary ||
+            "Echo sees a pattern of deliberate pacing and helpful meeting structure.",
+        }
+      : {
+          label: "Quiet Operator",
+          headline: "Your day is built for deep, deliberate work.",
+          summary:
+            "Echo sees a calm rhythm with manageable load and enough space for meaningful progress.",
+        };
+
+  // Small static preview line (CEO point D – keeps UI calm)
+  const echoJarPreviewText =
+    "EchoJar is watching today’s themes across communication, follow-up load, and context switching.";
+
+  /* -------------------------------------------------------
+     RENDER
+  ------------------------------------------------------- */
+
+  const dateLabel = new Date(todayStr).toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+
+  const loadLabel =
+    (todayWorkAbility ?? 0) >= 80
+      ? "Light load"
+      : (todayWorkAbility ?? 0) >= 65
+      ? "Comfortable"
+      : (todayWorkAbility ?? 0) >= 50
+      ? "Manageable"
+      : "Heavy load";
+
+  const tomorrowOutlookLabel = getTomorrowOutlookLabel(tomorrowWorkAbility);
+
   return (
     <>
       <DashboardSubscription />
@@ -420,8 +345,8 @@ export default async function DashboardPage() {
               </h1>
 
               <p className="text-sm sm:text-base text-slate-200/90 leading-relaxed">
-                Your control surface for summaries, email intelligence, and daily
-                signal optimisation.
+                Your control surface for summaries, calendar intelligence, email
+                bands, and daily signal optimisation.
               </p>
             </div>
 
@@ -464,15 +389,28 @@ export default async function DashboardPage() {
                   <span>{outstandingActionCount} action threads outstanding</span>
                 </div>
               )}
+
+              {/* Tomorrow outlook badge (CEO point C) */}
+              <div className="mt-1 inline-flex items-center gap-2 rounded-full border border-sky-500/40 bg-sky-500/10 px-3 py-1 text-[11px] text-sky-100">
+                <span className="uppercase tracking-[0.18em] text-sky-300/90">
+                  Tomorrow
+                </span>
+                <span className="font-medium">
+                  {tomorrowOutlookLabel}
+                  {typeof tomorrowWorkAbility === "number"
+                    ? ` (${tomorrowWorkAbility}% focus capacity)`
+                    : ""}
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* MAIN GRID – Option A (left intelligence stack, right email engine) */}
-        <div className="grid gap-6 md:grid-cols-2">
-          {/* LEFT COLUMN – DAILY INTELLIGENCE STACK */}
+        {/* Main grid: left = Summary + Work Story + Persona, right = Email */}
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1.3fr)]">
+          {/* LEFT STACK --------------------------------------------------- */}
           <div className="space-y-6">
-            {/* SUMMARY CARD (unchanged) */}
+            {/* SUMMARY CARD */}
             <div
               className="
                 relative overflow-hidden rounded-2xl backdrop-blur-2xl
@@ -484,24 +422,42 @@ export default async function DashboardPage() {
               <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(255,255,255,0.04)]" />
 
               <div className="relative space-y-4">
-                <p className="text-[11px] font-semibold tracking-[0.22em] text-slate-300/80">
-                  SUMMARY · ECHO AM / PM
+                <p className="text-[11px] font-semibold tracking-[0.22em] text-slate-300/80 uppercase">
+                  Summary · Echo AM / PM
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  Powered by your real activity across email, meetings, and
+                  tasks.
                 </p>
 
-                <div className="space-y-1">
+                <div className="space-y-2">
                   <h2 className="text-xl sm:text-2xl font-semibold text-white">
                     Today&apos;s Summary
                   </h2>
-                  {todayAM || todayPM ? (
+
+                  {latestReflection ? (
+                    <p className="text-sm text-slate-200/95 leading-relaxed">
+                      {summaryPreview}
+                      {summaryIsLong && (
+                        <>
+                          {" "}
+                          <a
+                            href="/summaries"
+                            className="text-sky-300 underline underline-offset-2"
+                          >
+                            View full summary
+                          </a>
+                        </>
+                      )}
+                    </p>
+                  ) : todayAM || todayPM ? (
                     <p className="text-sm text-slate-200/90 leading-relaxed">
-                      {todayPM
-                        ? "Your PM reflection is ready."
-                        : "Your AM reflection is ready."}
+                      Your latest reflection is ready in the Summaries view.
                     </p>
                   ) : (
                     <p className="text-sm text-slate-200/90">
-                      Echo will generate a calm AM/PM digest once Microsoft 365 is
-                      connected.
+                      Echo will generate a calm AM/PM digest once Microsoft 365
+                      is connected.
                     </p>
                   )}
                 </div>
@@ -544,9 +500,7 @@ export default async function DashboardPage() {
                   {latestWins.length > 0 && (
                     <p className="text-[11px] text-slate-400/90 pt-1">
                       Echo’s highlight:{" "}
-                      <span className="text-slate-100">
-                        {latestWins[0]}
-                      </span>
+                      <span className="text-slate-100">{latestWins[0]}</span>
                     </p>
                   )}
 
@@ -578,69 +532,49 @@ export default async function DashboardPage() {
               </div>
             </div>
 
-            {/* CALENDAR · TODAY’S WORK STORY (CALM CARD) */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/75 shadow-[0_0_40px_rgba(15,23,42,0.7)] px-5 py-5 sm:px-6 sm:py-6">
-              <p className="text-[11px] font-semibold tracking-[0.22em] text-slate-300/80 uppercase">
-                CALENDAR · TODAY&apos;S WORK STORY
-              </p>
+            {/* TODAY'S WORK STORY (Calendar) */}
+            <div
+              className="
+                relative overflow-hidden rounded-2xl backdrop-blur-2xl
+                bg-white/[0.09] border border-white/14 shadow-[0_20px_70px_rgba(0,0,0,0.58)]
+                hover:shadow-[0_24px_90px_rgba(0,0,0,0.7)] transition-all p-6 sm:p-7
+                bg-[linear-gradient(to_bottom,rgba(255,255,255,0.07),rgba(255,255,255,0.02))]
+              "
+            >
+              <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(255,255,255,0.04)]" />
 
-              <p className="mt-3 text-sm text-slate-200/90 leading-relaxed">
-                {todayWorkStory
-                  ? todayWorkStory
-                  : "Echo will start shaping a work story once it has a few days of calendar insight to lean on."}
-              </p>
+              <div className="relative space-y-3">
+                <p className="text-[11px] font-semibold tracking-[0.22em] text-slate-300/80 uppercase">
+                  Calendar · Today’s work story
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  Powered by Echo’s calendar model across meetings, gaps, and
+                  context switches.
+                </p>
 
-              <p className="mt-2 text-xs text-slate-400">
-                {primaryDeepStart
-                  ? `Best deep-work window starts around ${primaryDeepStart}.`
-                  : "Protect at least one 60–90 minute block for uninterrupted work."}
-              </p>
+                <h2 className="text-base sm:text-lg font-semibold text-white mt-1">
+                  {dateLabel}
+                </h2>
+
+                <p className="text-sm text-slate-200/95 leading-relaxed">
+                  {renderTodayWorkStory(todayWorkAbility)}
+                </p>
+
+                <p className="mt-1 text-xs text-slate-400">
+                  Focus capacity today:{" "}
+                  <span className="text-slate-100 font-medium">
+                    {todayWorkAbility != null ? `${todayWorkAbility}%` : "–"}
+                  </span>{" "}
+                  · {loadLabel}
+                </p>
+              </div>
             </div>
 
-            {/* ECHO · DAILY SIGNALS (GOLD, ULTRA-CALM) */}
-            <div className="rounded-2xl border border-amber-500/50 bg-gradient-to-br from-amber-500/10 via-slate-950 to-slate-950 shadow-[0_0_55px_rgba(245,158,11,0.35)] px-5 py-5 sm:px-6 sm:py-6">
-              <p className="text-[11px] font-semibold tracking-[0.22em] text-amber-200/90 uppercase">
-                ECHO · DAILY SIGNALS
-              </p>
-
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                <div className="space-y-1 max-w-xs">
-                  <p className="text-sm font-semibold text-amber-50">
-                    {echoPersona
-                      ? echoPersona.headline
-                      : "Echo is still forming your pattern."}
-                  </p>
-                  <p className="text-xs text-amber-100/80 leading-relaxed">
-                    {echoPersona
-                      ? echoPersona.summary
-                      : "As more days accumulate, Echo will learn how your focus, load and momentum tend to behave."}
-                  </p>
-                </div>
-
-                {echoPersona && (
-                  <span className="inline-flex items-center rounded-full border border-amber-400/70 bg-amber-500/10 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-amber-100/90">
-                    {echoPersona.label}
-                  </span>
-                )}
-              </div>
-
-              {/* Ultra-calm metrics row */}
-              <div className="mt-4 flex flex-wrap gap-3 text-[11px] text-amber-100/90">
-                <SignalChip label="Focus" value={focusScore} />
-                <SignalChip label="Load" value={strainScore} />
-                <SignalChip label="Momentum" value={momentumScore} />
-                <SignalChip label="Consistency" value={consistencyScore} />
-              </div>
-
-              <p className="mt-4 text-[11px] text-amber-100/80">
-                {echoTimeSaved.total > 0
-                  ? `Echo estimates it defended around ${echoTimeSaved.total} minutes of your time today.`
-                  : "Once Echo has enough signal, it will estimate how many minutes of noise it’s helping you defend each day."}
-              </p>
-            </div>
+            {/* TODAY'S PERSONA (gold EchoJar card) */}
+            <PersonaCard persona={persona} />
           </div>
 
-          {/* RIGHT COLUMN – EMAIL INTELLIGENCE (UNCHANGED) */}
+          {/* RIGHT COLUMN -------------------------------------------------- */}
           <div
             className="
               relative overflow-hidden rounded-2xl backdrop-blur-2xl
@@ -652,8 +586,11 @@ export default async function DashboardPage() {
             <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(255,255,255,0.04)]" />
 
             <div className="relative space-y-4">
-              <p className="text-[11px] font-semibold tracking-[0.22em] text-slate-300/80">
-                EMAIL · SIGNAL BANDS
+              <p className="text-[11px] font-semibold tracking-[0.22em] text-slate-300/80 uppercase">
+                Email · Signal bands
+              </p>
+              <p className="text-[11px] text-slate-400">
+                Powered by Echo’s live classification of your inbox.
               </p>
 
               <h2 className="text-xl sm:text-2xl font-semibold text-white">
@@ -661,15 +598,16 @@ export default async function DashboardPage() {
               </h2>
 
               <p className="text-sm text-slate-200/90">
-                Echo classifies messages into action, follow-up, and noise — only
-                counting threads that still need attention.
+                Echo classifies messages into action, follow-up, and noise —
+                only counting threads that still need attention.
               </p>
 
               <div className="mt-4 grid gap-2 text-sm text-slate-200/95">
                 {/* ACTION */}
                 <div className="flex items-center justify-between rounded-xl px-3 py-2 border border-white/10 bg-slate-900/40 shadow-[0_-2px_12px_rgba(244,114,182,0.25)]">
                   <span className="flex items-center gap-1">
-                    <Zap size={14} className="text-fuchsia-400 opacity-80" /> Action
+                    <Zap size={14} className="text-fuchsia-400 opacity-80" />{" "}
+                    Action
                   </span>
                   <span className="text-slate-400/90 text-xs">
                     {outstandingActionCount} threads outstanding
@@ -698,7 +636,7 @@ export default async function DashboardPage() {
                 </div>
               </div>
 
-              {/* KEY EMAIL – unchanged behaviour */}
+              {/* KEY EMAIL */}
               <div className="mt-5 rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-xs sm:text-[13px] text-slate-200/95">
                 <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400/85 mb-1.5">
                   Today&apos;s key email
@@ -726,10 +664,31 @@ export default async function DashboardPage() {
                   </>
                 ) : (
                   <p className="text-slate-400/90">
-                    Once Echo has outstanding action threads, your highest-signal
-                    one will appear here.
+                    Once Echo has outstanding action threads, your
+                    highest-signal one will appear here.
                   </p>
                 )}
+              </div>
+
+              {/* Tomorrow Outlook + EchoJar preview (CEO C & D) */}
+              <div className="mt-5 border-t border-white/10 pt-3 space-y-2 text-[11px] text-slate-400">
+                <div className="flex items-center justify-between">
+                  <span className="uppercase tracking-[0.18em] text-slate-400/90">
+                    Tomorrow outlook
+                  </span>
+                  <span className="rounded-full border border-sky-400/50 bg-sky-500/10 px-2.5 py-[2px] text-[10px] text-sky-100">
+                    {tomorrowOutlookLabel}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <span className="uppercase tracking-[0.18em] text-slate-400/90">
+                    EchoJar
+                  </span>
+                  <p className="text-right text-[11px] text-slate-400">
+                    {echoJarPreviewText}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -740,24 +699,5 @@ export default async function DashboardPage() {
         </div>
       </div>
     </>
-  );
-}
-
-// Tiny helper component for the ultra-calm Echo signals row
-function SignalChip({
-  label,
-  value,
-}: {
-  label: string;
-  value: number | null;
-}) {
-  const display = value == null ? "—" : `${value}/10`;
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/60 bg-amber-500/10 px-2.5 py-0.5">
-      <span className="text-[10px] uppercase tracking-[0.18em] text-amber-200/90">
-        {label}
-      </span>
-      <span className="text-[11px] font-semibold text-amber-50">{display}</span>
-    </span>
   );
 }
