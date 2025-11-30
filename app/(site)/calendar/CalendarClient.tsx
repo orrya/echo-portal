@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 
+
 /* ---------------------------------------------------------
    TYPES
 --------------------------------------------------------- */
@@ -296,27 +297,28 @@ export default function CalendarClient({
          TODAY — METRICS BAR
       ----------------------------------------------------- */}
       <section className="flex flex-wrap gap-3">
-        <MetricChip
-          label="Focus capacity"
-          value={`${workAbility}%`}
-          subtitle={loadLabel}
-        />
-        <MetricChip
-          label="Time booked"
-          value={`${meetingCount} meetings`}
-          subtitle={`${meetingMinutes} min`}
-        />
-        <MetricChip
-          label="Day fractures"
-          value={fractures}
-          subtitle={`${fractureMinutes} min lost`}
-        />
-        <MetricChip
-          label="Switch cost"
-          value={switches}
-          subtitle={`${switchCost} min tax`}
-        />
-      </section>
+  <MetricChip
+    label="Focus capacity"
+    value={`${workAbility}%`}
+    subtitle={loadLabel}
+  />
+  <MetricChip
+    label="Time booked"
+    value={`${meetingCount} meetings`}
+    subtitle={`${meetingMinutes} min`}
+  />
+  <MetricChip
+    label="Day fractures"
+    value={fractures}
+    subtitle={`${fractureMinutes} min lost`}
+  />
+  <MetricChip
+    label="Switch cost"
+    value={switches}
+    subtitle={`${switchCost} min tax`}
+  />
+</section>
+
 
       {/* -----------------------------------------------------
          TODAY — MAIN GRID
