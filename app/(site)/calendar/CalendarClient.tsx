@@ -301,23 +301,31 @@ export default function CalendarClient({
     label="Focus capacity"
     value={`${workAbility}%`}
     subtitle={loadLabel}
+    tooltip="How much brainpower is free for deep concentration."
   />
+
   <MetricChip
     label="Time booked"
     value={`${meetingCount} meetings`}
     subtitle={`${meetingMinutes} min`}
+    tooltip="Total minutes of meetings scheduled today."
   />
+
   <MetricChip
     label="Day fractures"
     value={fractures}
     subtitle={`${fractureMinutes} min lost`}
+    tooltip="How often your focus is broken by meetings or idle gaps."
   />
+
   <MetricChip
     label="Switch cost"
     value={switches}
     subtitle={`${switchCost} min tax`}
+    tooltip="Minutes of cognitive energy lost from context switching."
   />
 </section>
+
 
 
       {/* -----------------------------------------------------
@@ -619,17 +627,32 @@ function MetricChip({
   label,
   value,
   subtitle,
+  tooltip,
 }: {
   label: string;
   value: string | number;
   subtitle?: string;
+  tooltip?: string;
 }) {
   return (
-    <div className="rounded-full border border-slate-700/80 bg-slate-900/70 px-4 py-2 text-xs text-slate-200 flex items-center gap-2">
-      <span className="uppercase tracking-[0.18em] text-[10px] text-slate-400">
-        {label}
-      </span>
+    <div className="relative group rounded-full border border-slate-700/80 bg-slate-900/70 px-4 py-2 text-xs text-slate-200 flex items-center gap-2">
+      <div className="flex items-center gap-1">
+        <span className="uppercase tracking-[0.18em] text-[10px] text-slate-400">
+          {label}
+        </span>
+
+        {tooltip && (
+          <span className="cursor-help text-slate-500 relative group-hover:text-slate-300 duration-150">
+            i
+            <div className="absolute left-1/2 top-full z-40 hidden w-56 -translate-x-1/2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-[11px] leading-relaxed text-slate-200 shadow-xl group-hover:block mt-2">
+              {tooltip}
+            </div>
+          </span>
+        )}
+      </div>
+
       <span className="font-semibold text-sm">{value}</span>
+
       {subtitle && (
         <span className="text-[11px] text-slate-400 whitespace-nowrap">
           · {subtitle}
