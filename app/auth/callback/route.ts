@@ -9,12 +9,27 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const siteUrl = CANONICAL_URL;
   const url = new URL(req.url);
+
   const authCode = url.searchParams.get("code");
+  const state = url.searchParams.get("state") || url.searchParams.get("provider");
 
   if (!authCode) {
     return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=missing_code`);
   }
 
+  // If state=nylas, treat this as a Nylas callback
+  if (state === "nylas") {
+    return handleNylasCallback(authCode, siteUrl);
+  }
+
+  // Default → Microsoft (internal v1)
+  return handleMicrosoftCallback(authCode, siteUrl);
+}
+
+/**
+ * 🔹 MICROSOFT INTERNAL FLOW (your original behaviour)
+ */
+async function handleMicrosoftCallback(code: string, siteUrl: string) {
   const tenantId = process.env.AZURE_TENANT_ID || "common";
   const clientId = process.env.AZURE_CLIENT_ID;
   const clientSecret = process.env.AZURE_CLIENT_SECRET;
@@ -36,7 +51,7 @@ export async function GET(req: Request) {
         grant_type: "authorization_code",
         client_id: clientId,
         client_secret: clientSecret,
-        code: authCode,
+        code,
         redirect_uri: redirectUri,
       }),
     }
@@ -128,9 +143,6 @@ export async function GET(req: Request) {
     tenant_id: userTenantId,
   });
 
-  // ❌ REMOVE subscription call from callback
-  // It causes cookie not to be written.
-
   // 6. Write auth cookie
   const cookieStore = cookies();
   cookieStore.set(
@@ -149,5 +161,102 @@ export async function GET(req: Request) {
   );
 
   // 7. Redirect → Dashboard
+  return NextResponse.redirect(`${siteUrl}/dashboard`);
+}
+
+/**
+ * 🔹 NYLAS FLOW (for all external users)
+ */
+async function handleNylasCallback(code: string, siteUrl: string) {
+  const redirectUri =
+    process.env.NYLAS_REDIRECT_URI || `${siteUrl}/auth/callback`;
+
+  if (!process.env.NYLAS_CLIENT_ID || !process.env.NYLAS_API_KEY) {
+    console.error("Nylas env missing");
+    return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=nylas_config`);
+  }
+
+  // 1. Exchange code → Nylas tokens
+  const tokenRes = await fetch("https://api.nylas.com/v3/connect/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_id: process.env.NYLAS_CLIENT_ID!,
+      client_secret: process.env.NYLAS_API_KEY!, // Nylas uses API key as secret
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: redirectUri,
+    }),
+  });
+
+  const tokens = await tokenRes.json();
+
+  if (!tokenRes.ok) {
+    console.error("Nylas token exchange failed:", tokens);
+    return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=nylas_failed`);
+  }
+
+  const email = tokens.email as string | undefined;
+  const accessToken = tokens.access_token as string;
+  const refreshToken = tokens.refresh_token as string | null;
+
+  if (!email) {
+    console.error("No email returned from Nylas:", tokens);
+    return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=nylas_no_email`);
+  }
+
+  // 2. Supabase admin client
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } }
+  );
+
+  // 3. Find or create user by email
+  const { data: listData } = await supabase.auth.admin.listUsers();
+  let user =
+    listData?.users.find(
+      (u) => u.email?.toLowerCase() === email.toLowerCase()
+    ) ?? null;
+
+  if (!user) {
+    const { data, error } = await supabase.auth.admin.createUser({
+      email,
+      email_confirm: true,
+    });
+
+    if (error || !data?.user) {
+      console.error("Create user (nylas) failed:", error);
+      return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=create_user`);
+    }
+
+    user = data.user;
+  }
+
+  // 4. Store Nylas tokens
+  await supabase.from("user_connections").upsert({
+    user_id: user.id,
+    provider: "nylas",
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  });
+
+  // 5. Set auth cookie
+  cookies().set(
+    "echo-auth",
+    JSON.stringify({
+      user_id: user.id,
+      email,
+    }),
+    {
+      maxAge: 60 * 60 * 24 * 30,
+      httpOnly: true,
+      secure: true,
+      path: "/",
+      sameSite: "lax",
+    }
+  );
+
+  // 6. Redirect → Dashboard
   return NextResponse.redirect(`${siteUrl}/dashboard`);
 }

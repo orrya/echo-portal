@@ -1,45 +1,35 @@
-// app/auth/sign-in/page.tsx
 "use client";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL!;
+import { CANONICAL_URL } from "@/lib/constants";
 
 export default function SignInPage() {
-  const handleSignIn = () => {
-    // ✅ Our own redirect handler, NOT Supabase OAuth
-    window.location.href = `${SITE_URL}/auth/redirect`;
+  const handleMicrosoftLogin = () => {
+    window.location.href = `/auth/login-microsoft`;
+  };
+
+  const handleNylasLogin = () => {
+    window.location.href = `/auth/login-nylas`;
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6">
-      <div className="max-w-md w-full space-y-6">
-        <p className="text-[11px] font-semibold tracking-[0.28em] text-slate-300/90 text-center">
-          ECHO · SIGN IN
-        </p>
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 px-6">
+      <div className="w-full max-w-md space-y-6 text-center">
+        
+        {/* NEW USERS — PRIMARY */}
+        <button
+          onClick={handleNylasLogin}
+          className="w-full rounded-xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 px-6 py-4 text-lg font-semibold text-white shadow-xl shadow-purple-500/30 hover:opacity-90 transition"
+        >
+          Continue with your Work Account
+        </button>
 
-        <h1 className="text-center text-2xl font-semibold text-white">
-          Sign in with Microsoft 365
-        </h1>
-
-        <p className="text-center text-sm text-slate-300/90">
-          Echo connects to your Microsoft 365 inbox to classify email, write
-          summaries, and prepare replies.
-        </p>
-
-        <div className="flex justify-center pt-2">
-          <button
-            onClick={handleSignIn}
-            className="
-              inline-flex items-center justify-center
-              rounded-full px-6 py-2.5 text-sm font-medium
-              bg-gradient-to-r from-fuchsia-500 via-violet-500 to-sky-500
-              text-white shadow-[0_0_24px_rgba(129,140,248,0.55)]
-              hover:shadow-[0_0_36px_rgba(129,140,248,0.85)]
-              transition-all
-            "
-          >
-            Continue with Microsoft
-          </button>
-        </div>
+        {/* INTERNAL ONLY — LOW EMPHASIS */}
+        <button
+          onClick={handleMicrosoftLogin}
+          className="w-full rounded-xl bg-slate-800/80 px-6 py-4 text-sm font-medium text-slate-300 border border-slate-700 hover:bg-slate-700/80 transition"
+        >
+          Continue with Microsoft (Internal v1)
+        </button>
       </div>
     </div>
   );
