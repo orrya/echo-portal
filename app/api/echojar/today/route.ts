@@ -14,40 +14,29 @@ function getLocalDateString() {
 }
 
 export async function GET() {
-  if (!supabaseUrl || !supabaseServiceKey) {
-    console.error("[echojar/today] Missing Supabase env vars");
-    return NextResponse.json(
-      { entry: null, error: "Supabase not configured" },
-      { status: 500 }
-    );
-  }
-
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   const today = getLocalDateString();
 
-  // Try today first
-  let { data, error } = await supabase
+  // 1 — try today exactly
+  let { data } = await supabase
     .from("echojar_daily")
     .select("*")
     .eq("user_id", USER_ID)
     .eq("date", today)
     .maybeSingle();
 
-  // If no row for today, fall back to latest entry
-  if ((error && error.code === "PGRST116") || !data) {
+  if (!data) {
+    // 2 — fallback to latest <= today
     const fallback = await supabase
       .from("echojar_daily")
       .select("*")
       .eq("user_id", USER_ID)
+      .lte("date", today)             // 🔥 ignore future rows
       .order("date", { ascending: false })
       .limit(1)
       .maybeSingle();
 
     data = fallback.data ?? null;
-  }
-
-  if (!data) {
-    return NextResponse.json({ entry: null });
   }
 
   return NextResponse.json({ entry: data });

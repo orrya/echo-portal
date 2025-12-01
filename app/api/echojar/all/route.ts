@@ -9,10 +9,13 @@ export async function GET() {
 
   const userId = "75925360-ebf2-4542-a672-2449d2cf84a1";
 
+  const today = new Date().toISOString().split("T")[0];
+
   const { data, error } = await supabase
     .from("echojar_daily")
     .select("*")
     .eq("user_id", userId)
+    .lte("date", today)            // 🔥 ignore future rows
     .order("date", { ascending: false });
 
   if (error) {
@@ -20,5 +23,5 @@ export async function GET() {
     return NextResponse.json({ entries: [] });
   }
 
-  return NextResponse.json({ entries: data });
+  return NextResponse.json({ entries: data ?? [] });
 }

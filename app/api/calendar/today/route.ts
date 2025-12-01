@@ -1,7 +1,12 @@
 // app/api/calendar/today/route.ts
-
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+
+function getLocalDate() {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().split("T")[0];
+}
 
 export async function GET() {
   const supabase = createClient(
@@ -10,44 +15,50 @@ export async function GET() {
   );
 
   const userId = "75925360-ebf2-4542-a672-2449d2cf84a1";
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalDate();
 
-  const { data, error } = await supabase
-    .from("work_state_snapshots")
+  // 1 — try today's calendar snapshot
+  let { data } = await supabase
+    .from("calendar_snapshots")
     .select("*")
     .eq("user_id", userId)
     .eq("date", today)
-    .single();
+    .maybeSingle();
 
-  if (error) {
-    return NextResponse.json({ snapshot: null });
+  if (!data) {
+    // 2 — fallback to most recent snapshot <= today
+    const fallback = await supabase
+      .from("calendar_snapshots")
+      .select("*")
+      .eq("user_id", userId)
+      .lte("date", today)             // 🔥 avoids future-dated Dec 2
+      .order("date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    data = fallback.data ?? null;
   }
 
-  // Construct the proper camelCase API response
-  const snapshot = {
-    date: data.date,
-    calendarInsights: {
-      workAbility: Number(data.work_ability_score ?? 0),
-      meetingCount: Number(data.meeting_count ?? 0),
-      meetingLoadMinutes: Number(data.meeting_load_minutes ?? 0),
-      fragments: Number(data.fragments ?? 0),
-      lostFragmentMinutes: Number(data.lost_fragment_minutes ?? 0),
-      contextSwitches: Number(data.context_switches ?? 0),
-      contextSwitchCost: Number(data.context_switch_cost ?? 0),
-      deepWorkWindows: safeParse(data.deep_work_windows),
-      likelyFollowUp: safeParse(data.likely_follow_up),
-    },
-    dayTimeline: safeParse(data.day_timeline),
-  };
+  if (!data) return NextResponse.json({ snapshot: null });
 
-  return NextResponse.json({ snapshot });
+  return NextResponse.json({
+    snapshot: {
+      date: data.date,
+      dayTimeline: safeParse(data.day_timeline),
+      calendarInsights: safeParse(data.calendar_insights),
+      flaggedMeetings: safeParse(data.flagged_meetings),
+      deepWorkWindows: safeParse(data.deep_work_windows),
+      forecast: safeParse(data.forecast),
+      aiStory: data.ai_story ?? "",
+    },
+  });
 }
 
-function safeParse(value: any) {
+function safeParse(v: any) {
   try {
-    if (!value) return [];
-    if (typeof value === "string") return JSON.parse(value);
-    return value;
+    if (!v) return [];
+    if (typeof v === "string") return JSON.parse(v);
+    return v;
   } catch {
     return [];
   }
