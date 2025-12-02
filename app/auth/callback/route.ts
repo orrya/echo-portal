@@ -19,18 +19,19 @@ export async function GET(req: Request) {
     return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=missing_code`);
   }
 
-  // Hosted OAuth: Nylas
+  // If later you revive Nylas BYO OAuth, you can still use state=nylas.
   if (state === "nylas") {
     return handleNylasCallback(authCode, siteUrl);
   }
 
-  // Default → Microsoft internal login
+  // Default → Microsoft (multi-tenant)
   return handleMicrosoftCallback(authCode, siteUrl);
 }
 
-/* -----------------------------------------------------------------------------
-   MICROSOFT INTERNAL FLOW (v1 logic kept, stable)
------------------------------------------------------------------------------ */
+/* -------------------------------------------------------------------------- */
+/*                    🔹 MICROSOFT MULTI-TENANT FLOW                          */
+/* -------------------------------------------------------------------------- */
+
 async function handleMicrosoftCallback(code: string, siteUrl: string) {
   const tenantId = process.env.AZURE_TENANT_ID || "common";
   const clientId = process.env.AZURE_CLIENT_ID;
@@ -38,11 +39,14 @@ async function handleMicrosoftCallback(code: string, siteUrl: string) {
 
   if (!clientId || !clientSecret) {
     console.error("Azure env missing");
-    return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=azure_config`);
+    return NextResponse.redirect(
+      `${siteUrl}/auth/sign-in?error=azure_config`
+    );
   }
 
   const redirectUri = `${siteUrl}/auth/callback`;
 
+  // Exchange code → tokens
   const tokenRes = await fetch(
     `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
     {
@@ -62,19 +66,23 @@ async function handleMicrosoftCallback(code: string, siteUrl: string) {
 
   if (!tokenRes.ok) {
     console.error("Azure token exchange failed:", tokenData);
-    return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=token_exchange`);
+    return NextResponse.redirect(
+      `${siteUrl}/auth/sign-in?error=token_exchange`
+    );
   }
 
-  const accessToken = tokenData.access_token;
-  const refreshToken = tokenData.refresh_token || null;
-  const expiresIn = tokenData.expires_in || 3600;
+  const accessToken = tokenData.access_token as string;
+  const refreshToken = (tokenData.refresh_token as string) || null;
+  const expiresIn = (tokenData.expires_in as number) || 3600;
 
-  // Decode tenant
+  // Decode tenant (optional)
   let userTenantId: string | null = null;
   if (tokenData.id_token) {
     try {
       const payload = tokenData.id_token.split(".")[1];
-      const decoded = JSON.parse(Buffer.from(payload, "base64").toString());
+      const decoded = JSON.parse(
+        Buffer.from(payload, "base64").toString()
+      );
       userTenantId = decoded?.tid || null;
     } catch (err) {
       console.error("Failed to decode Microsoft id_token:", err);
@@ -104,7 +112,7 @@ async function handleMicrosoftCallback(code: string, siteUrl: string) {
     { auth: { persistSession: false } }
   );
 
-  // Find user via listing (v1)
+  // Find or create user
   const { data: listData } = await supabase.auth.admin.listUsers();
   let user =
     listData?.users.find(
@@ -119,22 +127,25 @@ async function handleMicrosoftCallback(code: string, siteUrl: string) {
 
     if (error || !data?.user) {
       console.error("Create user failed:", error);
-      return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=create_user`);
+      return NextResponse.redirect(
+        `${siteUrl}/auth/sign-in?error=create_user`
+      );
     }
 
     user = data.user;
   }
 
-  // Store connection
+  // Store connection — IMPORTANT: provider = "microsoft" to match msTokens.ts
   const expiresAtIso = new Date(Date.now() + expiresIn * 1000).toISOString();
 
   await supabase.from("user_connections").upsert({
     user_id: user.id,
-    provider: "azure",
+    provider: "microsoft",
     access_token: accessToken,
     refresh_token: refreshToken,
     expires_at: expiresAtIso,
     tenant_id: userTenantId,
+    active: true,
   });
 
   // Set login cookie
@@ -153,9 +164,10 @@ async function handleMicrosoftCallback(code: string, siteUrl: string) {
   return NextResponse.redirect(`${siteUrl}/dashboard`);
 }
 
-/* -----------------------------------------------------------------------------
-   NYLAS HOSTED OAUTH CALLBACK (correct v1-compatible version)
------------------------------------------------------------------------------ */
+/* -------------------------------------------------------------------------- */
+/*                 🔹 NYLAS FLOW (leave for later / optional)                 */
+/* -------------------------------------------------------------------------- */
+
 async function handleNylasCallback(code: string, siteUrl: string) {
   const redirectUri =
     process.env.NYLAS_REDIRECT_URI || `${siteUrl}/auth/callback`;
@@ -165,10 +177,11 @@ async function handleNylasCallback(code: string, siteUrl: string) {
 
   if (!clientId || !apiKey) {
     console.error("Nylas env missing");
-    return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=nylas_config`);
+    return NextResponse.redirect(
+      `${siteUrl}/auth/sign-in?error=nylas_config`
+    );
   }
 
-  // Token exchange
   const tokenRes = await fetch("https://api.nylas.com/v3/connect/token", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -185,7 +198,9 @@ async function handleNylasCallback(code: string, siteUrl: string) {
 
   if (!tokenRes.ok) {
     console.error("Nylas token exchange failed:", tokens);
-    return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=nylas_failed`);
+    return NextResponse.redirect(
+      `${siteUrl}/auth/sign-in?error=nylas_failed`
+    );
   }
 
   const {
@@ -199,24 +214,23 @@ async function handleNylasCallback(code: string, siteUrl: string) {
 
   if (!email || !grant_id) {
     console.error("Incomplete Nylas token response:", tokens);
-    return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=nylas_invalid`);
+    return NextResponse.redirect(
+      `${siteUrl}/auth/sign-in?error=nylas_invalid`
+    );
   }
 
-  // Supabase admin
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } }
   );
 
-  // Find user via listUsers (v1)
   const { data: listData } = await supabase.auth.admin.listUsers();
   let user =
     listData?.users.find(
       (u) => u.email?.toLowerCase() === email.toLowerCase()
     ) ?? null;
 
-  // Create new user if needed
   if (!user) {
     const { data, error } = await supabase.auth.admin.createUser({
       email,
@@ -225,13 +239,14 @@ async function handleNylasCallback(code: string, siteUrl: string) {
 
     if (error || !data?.user) {
       console.error("Create Nylas user failed:", error);
-      return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=create_user`);
+      return NextResponse.redirect(
+        `${siteUrl}/auth/sign-in?error=create_user`
+      );
     }
 
     user = data.user;
   }
 
-  // Store Nylas connection
   await supabase.from("user_connections").upsert({
     user_id: user.id,
     provider: "nylas",
@@ -243,7 +258,6 @@ async function handleNylasCallback(code: string, siteUrl: string) {
     scope: scope ?? null,
   });
 
-  // Set cookie
   cookies().set(
     "echo-auth",
     JSON.stringify({ user_id: user.id, email }),
