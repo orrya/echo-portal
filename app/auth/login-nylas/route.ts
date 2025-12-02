@@ -14,17 +14,15 @@ export async function GET() {
     );
   }
 
-  const authUrl = new URL("https://api.nylas.com/v3/connect/auth");
+  // ✅ Correct endpoint
+  const authUrl = new URL("https://api.nylas.com/v3/connect/authorize");
 
   authUrl.searchParams.set("client_id", clientId);
   authUrl.searchParams.set("redirect_uri", redirectUri);
   authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("access_type", "offline"); // Needed for refresh token
+  authUrl.searchParams.set("provider", "microsoft_graph");
+  authUrl.searchParams.set("access_type", "offline"); // allow refresh_token
   authUrl.searchParams.set("state", "nylas");
-
-  // OPTIONAL:
-  // Force Microsoft only: authUrl.searchParams.set("provider", "microsoft_graph");
-  // Force Google only: authUrl.searchParams.set("provider", "google");
 
   return NextResponse.redirect(authUrl.toString());
 }
