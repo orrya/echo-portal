@@ -1,4 +1,5 @@
 // app/auth/callback/route.ts
+
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
@@ -11,24 +12,25 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
 
   const authCode = url.searchParams.get("code");
-  const state = url.searchParams.get("state") || url.searchParams.get("provider");
+  const state =
+    url.searchParams.get("state") || url.searchParams.get("provider");
 
   if (!authCode) {
     return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=missing_code`);
   }
 
-  // If state=nylas, treat this as a Nylas callback
+  // Hosted OAuth: Nylas
   if (state === "nylas") {
     return handleNylasCallback(authCode, siteUrl);
   }
 
-  // Default → Microsoft (internal v1)
+  // Default → Microsoft internal login
   return handleMicrosoftCallback(authCode, siteUrl);
 }
 
-/**
- * 🔹 MICROSOFT INTERNAL FLOW (your original behaviour)
- */
+/* -----------------------------------------------------------------------------
+   MICROSOFT INTERNAL FLOW (v1 logic kept, stable)
+----------------------------------------------------------------------------- */
 async function handleMicrosoftCallback(code: string, siteUrl: string) {
   const tenantId = process.env.AZURE_TENANT_ID || "common";
   const clientId = process.env.AZURE_CLIENT_ID;
@@ -41,7 +43,6 @@ async function handleMicrosoftCallback(code: string, siteUrl: string) {
 
   const redirectUri = `${siteUrl}/auth/callback`;
 
-  // 1. Exchange code → tokens
   const tokenRes = await fetch(
     `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
     {
@@ -68,21 +69,19 @@ async function handleMicrosoftCallback(code: string, siteUrl: string) {
   const refreshToken = tokenData.refresh_token || null;
   const expiresIn = tokenData.expires_in || 3600;
 
-  // Decode tenant ID
+  // Decode tenant
   let userTenantId: string | null = null;
   if (tokenData.id_token) {
     try {
-      const base64Payload = tokenData.id_token.split(".")[1];
-      const decodedPayload = JSON.parse(
-        Buffer.from(base64Payload, "base64").toString()
-      );
-      userTenantId = decodedPayload?.tid || null;
+      const payload = tokenData.id_token.split(".")[1];
+      const decoded = JSON.parse(Buffer.from(payload, "base64").toString());
+      userTenantId = decoded?.tid || null;
     } catch (err) {
-      console.error("Failed to decode id_token:", err);
+      console.error("Failed to decode Microsoft id_token:", err);
     }
   }
 
-  // 2. Fetch Azure profile
+  // Fetch user profile
   const profileRes = await fetch("https://graph.microsoft.com/v1.0/me", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -98,14 +97,14 @@ async function handleMicrosoftCallback(code: string, siteUrl: string) {
     return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=no_email`);
   }
 
-  // 3. Supabase admin client
+  // Supabase admin
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } }
   );
 
-  // 4. Find or create Supabase user by email
+  // Find user via listing (v1)
   const { data: listData } = await supabase.auth.admin.listUsers();
   let user =
     listData?.users.find(
@@ -126,13 +125,8 @@ async function handleMicrosoftCallback(code: string, siteUrl: string) {
     user = data.user;
   }
 
-  // 5. Store tokens + profile
+  // Store connection
   const expiresAtIso = new Date(Date.now() + expiresIn * 1000).toISOString();
-
-  await supabase.from("profiles").upsert({
-    id: user.id,
-    display_name: profile.displayName ?? null,
-  });
 
   await supabase.from("user_connections").upsert({
     user_id: user.id,
@@ -143,14 +137,10 @@ async function handleMicrosoftCallback(code: string, siteUrl: string) {
     tenant_id: userTenantId,
   });
 
-  // 6. Write auth cookie
-  const cookieStore = cookies();
-  cookieStore.set(
+  // Set login cookie
+  cookies().set(
     "echo-auth",
-    JSON.stringify({
-      user_id: user.id,
-      email,
-    }),
+    JSON.stringify({ user_id: user.id, email }),
     {
       maxAge: 60 * 60 * 24 * 30,
       httpOnly: true,
@@ -160,29 +150,31 @@ async function handleMicrosoftCallback(code: string, siteUrl: string) {
     }
   );
 
-  // 7. Redirect → Dashboard
   return NextResponse.redirect(`${siteUrl}/dashboard`);
 }
 
-/**
- * 🔹 NYLAS FLOW (for all external users)
- */
+/* -----------------------------------------------------------------------------
+   NYLAS HOSTED OAUTH CALLBACK (correct v1-compatible version)
+----------------------------------------------------------------------------- */
 async function handleNylasCallback(code: string, siteUrl: string) {
   const redirectUri =
     process.env.NYLAS_REDIRECT_URI || `${siteUrl}/auth/callback`;
 
-  if (!process.env.NYLAS_CLIENT_ID || !process.env.NYLAS_API_KEY) {
+  const clientId = process.env.NYLAS_CLIENT_ID!;
+  const apiKey = process.env.NYLAS_API_KEY!;
+
+  if (!clientId || !apiKey) {
     console.error("Nylas env missing");
     return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=nylas_config`);
   }
 
-  // 1. Exchange code → Nylas tokens
+  // Token exchange
   const tokenRes = await fetch("https://api.nylas.com/v3/connect/token", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      client_id: process.env.NYLAS_CLIENT_ID!,
-      client_secret: process.env.NYLAS_API_KEY!, // Nylas uses API key as secret
+      client_id: clientId,
+      client_secret: apiKey,
       grant_type: "authorization_code",
       code,
       redirect_uri: redirectUri,
@@ -196,29 +188,35 @@ async function handleNylasCallback(code: string, siteUrl: string) {
     return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=nylas_failed`);
   }
 
-  const email = tokens.email as string | undefined;
-  const accessToken = tokens.access_token as string;
-  const refreshToken = tokens.refresh_token as string | null;
+  const {
+    email,
+    access_token,
+    refresh_token,
+    grant_id,
+    provider,
+    scope,
+  } = tokens;
 
-  if (!email) {
-    console.error("No email returned from Nylas:", tokens);
-    return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=nylas_no_email`);
+  if (!email || !grant_id) {
+    console.error("Incomplete Nylas token response:", tokens);
+    return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=nylas_invalid`);
   }
 
-  // 2. Supabase admin client
+  // Supabase admin
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } }
   );
 
-  // 3. Find or create user by email
+  // Find user via listUsers (v1)
   const { data: listData } = await supabase.auth.admin.listUsers();
   let user =
     listData?.users.find(
       (u) => u.email?.toLowerCase() === email.toLowerCase()
     ) ?? null;
 
+  // Create new user if needed
   if (!user) {
     const { data, error } = await supabase.auth.admin.createUser({
       email,
@@ -226,28 +224,29 @@ async function handleNylasCallback(code: string, siteUrl: string) {
     });
 
     if (error || !data?.user) {
-      console.error("Create user (nylas) failed:", error);
+      console.error("Create Nylas user failed:", error);
       return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=create_user`);
     }
 
     user = data.user;
   }
 
-  // 4. Store Nylas tokens
+  // Store Nylas connection
   await supabase.from("user_connections").upsert({
     user_id: user.id,
     provider: "nylas",
-    access_token: accessToken,
-    refresh_token: refreshToken,
+    grant_id,
+    email,
+    access_token,
+    refresh_token,
+    provider_raw: provider ?? null,
+    scope: scope ?? null,
   });
 
-  // 5. Set auth cookie
+  // Set cookie
   cookies().set(
     "echo-auth",
-    JSON.stringify({
-      user_id: user.id,
-      email,
-    }),
+    JSON.stringify({ user_id: user.id, email }),
     {
       maxAge: 60 * 60 * 24 * 30,
       httpOnly: true,
@@ -257,6 +256,5 @@ async function handleNylasCallback(code: string, siteUrl: string) {
     }
   );
 
-  // 6. Redirect → Dashboard
   return NextResponse.redirect(`${siteUrl}/dashboard`);
 }
