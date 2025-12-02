@@ -182,7 +182,7 @@ async function handleNylasCallback(code: string, siteUrl: string) {
   }
 
   // ⭐ REQUIRED BY HOSTED OAUTH ⭐
-  const tokenRes = await fetch("https://api.nylas.com/v3/connect/token", {
+  const tokenRes = await fetch("https://api.eu.nylas.com/v3/connect/token", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -191,9 +191,9 @@ async function handleNylasCallback(code: string, siteUrl: string) {
       grant_type: "authorization_code",
       code,
       redirect_uri: redirectUri,
-      code_verifier: "nylas", // IMPORTANT
+      code_verifier: cookies().get("nylas_code_verifier")?.value, // 💥 correct PKCE
     }),
-  });
+});
 
   const tokens = await tokenRes.json();
 
