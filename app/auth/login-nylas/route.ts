@@ -41,7 +41,6 @@ export async function GET() {
   nylasAuthUrl.searchParams.set("client_id", clientId);
   nylasAuthUrl.searchParams.set("redirect_uri", `${siteUrl}/auth/callback`);
   nylasAuthUrl.searchParams.set("response_type", "code");
-  nylasAuthUrl.searchParams.set("provider", "microsoft"); // REQUIRED
   nylasAuthUrl.searchParams.set("access_type", "offline");
   nylasAuthUrl.searchParams.set("state", "nylas");
 
