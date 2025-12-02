@@ -19,12 +19,12 @@ export async function GET(req: Request) {
     return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=missing_code`);
   }
 
-  // If later you revive Nylas BYO OAuth, you can still use state=nylas.
+  // Nylas Hosted OAuth
   if (state === "nylas") {
     return handleNylasCallback(authCode, siteUrl);
   }
 
-  // Default → Microsoft (multi-tenant)
+  // Microsoft multi-tenant default
   return handleMicrosoftCallback(authCode, siteUrl);
 }
 
@@ -46,7 +46,6 @@ async function handleMicrosoftCallback(code: string, siteUrl: string) {
 
   const redirectUri = `${siteUrl}/auth/callback`;
 
-  // Exchange code → tokens
   const tokenRes = await fetch(
     `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
     {
@@ -75,7 +74,7 @@ async function handleMicrosoftCallback(code: string, siteUrl: string) {
   const refreshToken = (tokenData.refresh_token as string) || null;
   const expiresIn = (tokenData.expires_in as number) || 3600;
 
-  // Decode tenant (optional)
+  // Decode tenant ID
   let userTenantId: string | null = null;
   if (tokenData.id_token) {
     try {
@@ -89,7 +88,7 @@ async function handleMicrosoftCallback(code: string, siteUrl: string) {
     }
   }
 
-  // Fetch user profile
+  // Fetch Microsoft profile
   const profileRes = await fetch("https://graph.microsoft.com/v1.0/me", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -112,7 +111,7 @@ async function handleMicrosoftCallback(code: string, siteUrl: string) {
     { auth: { persistSession: false } }
   );
 
-  // Find or create user
+  // Find/create user
   const { data: listData } = await supabase.auth.admin.listUsers();
   let user =
     listData?.users.find(
@@ -135,7 +134,7 @@ async function handleMicrosoftCallback(code: string, siteUrl: string) {
     user = data.user;
   }
 
-  // Store connection — IMPORTANT: provider = "microsoft" to match msTokens.ts
+  // Store in user_connections (provider=microsoft)
   const expiresAtIso = new Date(Date.now() + expiresIn * 1000).toISOString();
 
   await supabase.from("user_connections").upsert({
@@ -148,7 +147,7 @@ async function handleMicrosoftCallback(code: string, siteUrl: string) {
     active: true,
   });
 
-  // Set login cookie
+  // Cookie
   cookies().set(
     "echo-auth",
     JSON.stringify({ user_id: user.id, email }),
@@ -165,7 +164,7 @@ async function handleMicrosoftCallback(code: string, siteUrl: string) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                 🔹 NYLAS FLOW (leave for later / optional)                 */
+/*                    🔹 NYLAS HOSTED OAUTH FLOW                              */
 /* -------------------------------------------------------------------------- */
 
 async function handleNylasCallback(code: string, siteUrl: string) {
@@ -182,6 +181,7 @@ async function handleNylasCallback(code: string, siteUrl: string) {
     );
   }
 
+  // ⭐ REQUIRED BY HOSTED OAUTH ⭐
   const tokenRes = await fetch("https://api.nylas.com/v3/connect/token", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -191,6 +191,7 @@ async function handleNylasCallback(code: string, siteUrl: string) {
       grant_type: "authorization_code",
       code,
       redirect_uri: redirectUri,
+      code_verifier: "nylas", // IMPORTANT
     }),
   });
 
@@ -213,12 +214,13 @@ async function handleNylasCallback(code: string, siteUrl: string) {
   } = tokens;
 
   if (!email || !grant_id) {
-    console.error("Incomplete Nylas token response:", tokens);
+    console.error("Invalid Nylas token payload:", tokens);
     return NextResponse.redirect(
       `${siteUrl}/auth/sign-in?error=nylas_invalid`
     );
   }
 
+  // Supabase admin
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -247,6 +249,7 @@ async function handleNylasCallback(code: string, siteUrl: string) {
     user = data.user;
   }
 
+  // Store Nylas grant
   await supabase.from("user_connections").upsert({
     user_id: user.id,
     provider: "nylas",
@@ -256,8 +259,10 @@ async function handleNylasCallback(code: string, siteUrl: string) {
     refresh_token,
     provider_raw: provider ?? null,
     scope: scope ?? null,
+    active: true,
   });
 
+  // Cookie
   cookies().set(
     "echo-auth",
     JSON.stringify({ user_id: user.id, email }),

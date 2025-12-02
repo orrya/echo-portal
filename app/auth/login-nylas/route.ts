@@ -1,28 +1,25 @@
-// app/auth/login-nylas/route.ts
 import { NextResponse } from "next/server";
 import { CANONICAL_URL } from "@/lib/constants";
 
-export async function GET() {
-  const clientId = process.env.NYLAS_CLIENT_ID;
-  const redirectUri =
-    process.env.NYLAS_REDIRECT_URI || `${CANONICAL_URL}/auth/callback`;
+export const dynamic = "force-dynamic";
 
+export async function GET() {
+  const siteUrl = CANONICAL_URL;
+
+  const clientId = process.env.NYLAS_CLIENT_ID;
   if (!clientId) {
-    console.error("NYLAS_CLIENT_ID missing");
-    return NextResponse.redirect(
-      `${CANONICAL_URL}/auth/sign-in?error=nylas_config`
-    );
+    console.error("Missing NYLAS_CLIENT_ID");
+    return NextResponse.redirect(`${siteUrl}/auth/sign-in?error=nylas_config`);
   }
 
-  // ✅ Correct endpoint
-  const authUrl = new URL("https://api.nylas.com/v3/connect/authorize");
+  // Nylas Hosted OAuth start
+  const nylasAuthUrl = new URL("https://api.nylas.com/v3/connect/auth");
 
-  authUrl.searchParams.set("client_id", clientId);
-  authUrl.searchParams.set("redirect_uri", redirectUri);
-  authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("provider", "microsoft_graph");
-  authUrl.searchParams.set("access_type", "offline"); // allow refresh_token
-  authUrl.searchParams.set("state", "nylas");
+  nylasAuthUrl.searchParams.set("client_id", clientId);
+  nylasAuthUrl.searchParams.set("redirect_uri", `${siteUrl}/auth/callback`);
+  nylasAuthUrl.searchParams.set("response_type", "code");
+  nylasAuthUrl.searchParams.set("state", "nylas");
+  nylasAuthUrl.searchParams.set("access_type", "offline");
 
-  return NextResponse.redirect(authUrl.toString());
+  return NextResponse.redirect(nylasAuthUrl.toString());
 }
