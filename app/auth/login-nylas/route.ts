@@ -1,3 +1,4 @@
+console.log("NYLAS_CLIENT_ID:", process.env.NYLAS_CLIENT_ID);
 import { NextResponse } from "next/server";
 import { CANONICAL_URL } from "@/lib/constants";
 
