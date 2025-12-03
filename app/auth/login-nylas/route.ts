@@ -1,4 +1,5 @@
-console.log("NYLAS_CLIENT_ID:", process.env.NYLAS_CLIENT_ID);
+// app/auth/login-nylas/route.ts
+
 import { NextResponse } from "next/server";
 import { CANONICAL_URL } from "@/lib/constants";
 
@@ -19,12 +20,13 @@ export async function GET() {
   const clientId = process.env.NYLAS_CLIENT_ID;
 
   if (!clientId) {
+    console.error("Missing NYLAS_CLIENT_ID");
     return NextResponse.redirect(
-      `${siteUrl}/auth/sign-in?error=missing_nylas_config`
+      `${siteUrl}/auth/sign-in?error=nylas_config`
     );
   }
 
-  // PKCE
+  // PKCE verifier
   const codeVerifier = generateCodeVerifier();
   const cookieStore = require("next/headers").cookies;
   cookieStore().set("nylas_code_verifier", codeVerifier, {
@@ -35,15 +37,12 @@ export async function GET() {
     maxAge: 300,
   });
 
-  // Correct Hosted Auth
-  const nylasAuthUrl = new URL(
-    "https://api.eu.nylas.com/v3/connect/auth"
-  );
-  nylasAuthUrl.searchParams.set("client_id", clientId);
-  nylasAuthUrl.searchParams.set("redirect_uri", `${siteUrl}/auth/callback`);
-  nylasAuthUrl.searchParams.set("response_type", "code");
-  nylasAuthUrl.searchParams.set("access_type", "offline");
-  nylasAuthUrl.searchParams.set("state", "nylas");
+  const authUrl = new URL("https://api.eu.nylas.com/v3/connect/auth");
+  authUrl.searchParams.set("client_id", clientId);
+  authUrl.searchParams.set("redirect_uri", `${siteUrl}/auth/callback`);
+  authUrl.searchParams.set("response_type", "code");
+  authUrl.searchParams.set("access_type", "offline");
+  authUrl.searchParams.set("state", "nylas");
 
-  return NextResponse.redirect(nylasAuthUrl.toString());
+  return NextResponse.redirect(authUrl.toString());
 }
