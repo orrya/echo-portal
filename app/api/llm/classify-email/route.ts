@@ -1,0 +1,236 @@
+// app/api/llm/classify-email/route.ts
+import { NextResponse } from "next/server";
+import OpenAI from "openai";
+import { createClient } from "@supabase/supabase-js";
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
+});
+
+// Server-side Supabase (service role)
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+export async function POST(req: Request) {
+  try {
+    const {
+      user_id,
+      email_record_id,
+      subject,
+      from,
+      to,
+      cc,
+      body,
+      date_received,
+    } = await req.json();
+
+    if (!user_id || !email_record_id) {
+      return NextResponse.json(
+        { error: "Missing user_id or email_record_id" },
+        { status: 400 }
+      );
+    }
+
+    /* -------------------------------------------------
+       0. DEDUPE — DO WE ALREADY HAVE A PREPARED DRAFT?
+    ------------------------------------------------- */
+
+    const { data: existingDraft } = await supabase
+      .from("prepared_email_drafts")
+      .select("id, subject, rationale")
+      .eq("user_id", user_id)
+      .eq("email_record_id", email_record_id)
+      .eq("active", true)
+      .maybeSingle();
+
+    if (existingDraft) {
+      return NextResponse.json({
+        decision: {
+          should_prepare: true,
+          reason: existingDraft.rationale,
+          confidence: 1,
+          draft_intent: null,
+        },
+        prepared: {
+          id: existingDraft.id,
+          subject: existingDraft.subject,
+          rationale: existingDraft.rationale,
+        },
+      });
+    }
+
+    /* -------------------------------------------------
+       1. COGNITIVE DECISION — SHOULD WE PREPARE?
+    ------------------------------------------------- */
+
+    const decisionRes = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.25,
+      messages: [
+        {
+          role: "system",
+          content: `
+You are Echo, a cognitive twin acting on behalf of a single user.
+
+Your job is NOT to write emails.
+Your job is to decide whether preparing a reply would meaningfully reduce
+the user’s future cognitive load.
+
+Rules:
+- Silence is preferred unless preparation clearly saves effort.
+- Do NOT prepare drafts for purely informational emails.
+- Preparation is justified if it avoids re-reading, context switching,
+  emotional load, or urgency later.
+- Never prepare more than one draft per email.
+- Never assume the user wants to act immediately.
+
+Return JSON only.
+          `.trim(),
+        },
+        {
+          role: "user",
+          content: `
+Email details:
+
+Subject: ${subject}
+From: ${from}
+To: ${to}
+CC: ${cc || "None"}
+Received at: ${date_received}
+
+Email body:
+${body}
+
+Return JSON:
+{
+  "should_prepare": boolean,
+  "reason": string,
+  "confidence": number,
+  "draft_intent": string | null
+}
+          `.trim(),
+        },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    const decision = JSON.parse(
+      decisionRes.choices[0].message.content || "{}"
+    );
+
+    /* -------------------------------------------------
+       2. LOG COGNITION (ALWAYS)
+    ------------------------------------------------- */
+
+    await supabase.from("cognition_traces").insert({
+      user_id,
+      source: "email",
+      source_id: email_record_id,
+      decision,
+    });
+
+    /* -------------------------------------------------
+       3. IF NO PREPARATION → EXIT QUIETLY
+    ------------------------------------------------- */
+
+    if (!decision.should_prepare) {
+      return NextResponse.json({ decision, prepared: null });
+    }
+
+    /* -------------------------------------------------
+       4. WRITE THE ACTUAL DRAFT (READY TO SEND)
+    ------------------------------------------------- */
+
+    const draftRes = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.45,
+      messages: [
+        {
+          role: "system",
+          content: `
+You are Echo Compose, writing on behalf of the user in their own voice.
+
+Tone:
+- British English
+- Calm, friendly, concise
+- Plain text only
+- Short paragraphs
+- Human, not robotic
+
+Rules:
+- Respond appropriately based on intent.
+- If user is CC’d only, acknowledge but do not commit.
+- If informational, thank and note.
+- If unclear, infer likely intent without asking questions.
+
+Always sign off with:
+"Thanks," or "Many thanks,"
+
+Return JSON only:
+{ "body": "email reply text" }
+          `.trim(),
+        },
+        {
+          role: "user",
+          content: `
+Subject: ${subject}
+From: ${from}
+To: ${to}
+CC: ${cc || "None"}
+
+Email body:
+${body}
+
+Intent hint from Echo cognition:
+${decision.draft_intent || "None provided"}
+          `.trim(),
+        },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    const draftJson = JSON.parse(
+      draftRes.choices[0].message.content || "{}"
+    );
+
+    /* -------------------------------------------------
+       5. STORE PREPARED DRAFT (NOT SENT)
+    ------------------------------------------------- */
+
+    const { data: preparedDraft } = await supabase
+      .from("prepared_email_drafts")
+      .insert({
+        user_id,
+        email_record_id,
+        subject,
+        body: draftJson.body,
+        rationale: decision.reason,
+        surface: "email",
+        day_part: "any",
+        active: true,
+      })
+      .select()
+      .single();
+
+    /* -------------------------------------------------
+       6. RETURN CLEAN RESPONSE
+    ------------------------------------------------- */
+
+    return NextResponse.json({
+      decision,
+      prepared: {
+        id: preparedDraft.id,
+        subject: preparedDraft.subject,
+        rationale: preparedDraft.rationale,
+      },
+    });
+  } catch (error) {
+    console.error("classify-email error:", error);
+    return NextResponse.json(
+      { error: "Failed to classify email" },
+      { status: 500 }
+    );
+  }
+}
