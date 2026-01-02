@@ -12,7 +12,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import Image from "next/image";
-import { supabaseClient } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabase/client";
 
 const navItems = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
@@ -97,9 +97,9 @@ export default function NavBar() {
       {/* SIGN OUT */}
       <button
         onClick={async () => {
-          await supabaseClient.auth.signOut();
-          window.location.href = "/auth/sign-in";
-        }}
+  await supabase.auth.signOut();
+  window.location.href = "/auth/sign-in";
+}}
         className="flex items-center gap-1 text-slate-300 hover:text-white transition"
       >
         <LogOut size={20} />

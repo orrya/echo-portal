@@ -9,8 +9,8 @@ export async function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
   const host = req.headers.get("host");
 
-  // Allow callback without rewriting
-  if (path.startsWith("/auth/callback")) {
+  // ✅ Allow all auth routes (magic link, callbacks, etc.)
+  if (path.startsWith("/auth")) {
     return NextResponse.next();
   }
 
