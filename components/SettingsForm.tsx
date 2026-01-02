@@ -1,61 +1,99 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { supabaseClient } from "@/lib/supabaseClient";
+import { useEffect, useState } from "react";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 export default function SettingsForm() {
+  const supabase = createClientComponentClient();
+
   const [tone, setTone] = useState("");
   const [loading, setLoading] = useState(false);
   const [autoReply, setAutoReply] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
 
   const SITE_URL =
     process.env.NEXT_PUBLIC_SITE_URL || "https://echo.orrya.co.uk";
 
   useEffect(() => {
+    let alive = true;
+
     const fetchProfile = async () => {
+      setStatus(null);
+
       const {
         data: { user },
-      } = await supabaseClient.auth.getUser();
+        error: userErr,
+      } = await supabase.auth.getUser();
+
+      if (!alive) return;
+
+      if (userErr) {
+        console.error("getUser error:", userErr);
+        return;
+      }
 
       if (!user) return;
 
-      const { data } = await supabaseClient
+      const { data, error } = await supabase
         .from("profiles")
         .select("tone, auto_reply_rules")
         .eq("id", user.id)
         .single();
 
+      if (!alive) return;
+
+      if (error) {
+        console.error("fetch profiles error:", error);
+        return;
+      }
+
       if (data) {
         setTone(data.tone ?? "");
-        setAutoReply(data.auto_reply_rules?.enabled ?? false);
+        setAutoReply(Boolean(data.auto_reply_rules?.enabled));
       }
     };
 
     fetchProfile();
-  }, []);
+
+    return () => {
+      alive = false;
+    };
+  }, [supabase]);
 
   const saveSettings = async () => {
     setLoading(true);
+    setStatus(null);
 
-    const {
-      data: { user },
-    } = await supabaseClient.auth.getUser();
+    try {
+      const {
+        data: { user },
+        error: userErr,
+      } = await supabase.auth.getUser();
 
-    if (!user) {
+      if (userErr) throw userErr;
+      if (!user) {
+        setStatus("Not signed in.");
+        return;
+      }
+
+      const { error } = await supabase.from("profiles").upsert({
+        id: user.id,
+        tone,
+        auto_reply_rules: { enabled: autoReply },
+      });
+
+      if (error) throw error;
+
+      setStatus("Saved.");
+    } catch (err: any) {
+      console.error("saveSettings error:", err);
+      setStatus(err?.message || "Failed to save.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    await supabaseClient.from("profiles").upsert({
-      id: user.id,
-      tone,
-      auto_reply_rules: { enabled: autoReply },
-    });
-
-    setLoading(false);
   };
 
-  // Manual Microsoft OAuth redirect
+  // Manual Microsoft OAuth redirect (keep if you still use it)
   const connectMicrosoft = () => {
     window.location.href = `${SITE_URL}/auth/redirect`;
   };
@@ -125,7 +163,11 @@ export default function SettingsForm() {
       </div>
 
       {/* Buttons */}
-      <div className="flex flex-row justify-end gap-4 pt-4">
+      <div className="flex flex-row items-center justify-end gap-4 pt-4">
+        {status && (
+          <span className="mr-auto text-xs text-slate-300/80">{status}</span>
+        )}
+
         {/* Save */}
         <button
           onClick={saveSettings}
@@ -138,6 +180,7 @@ export default function SettingsForm() {
             shadow-[0_0_24px_rgba(129,140,248,0.55)]
             hover:shadow-[0_0_36px_rgba(129,140,248,0.85)]
             transition-all
+            disabled:opacity-60 disabled:cursor-not-allowed
           "
         >
           {loading ? "Saving…" : "Save settings"}
