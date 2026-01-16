@@ -196,6 +196,70 @@ ${decision.draft_intent || "None provided"}
     );
 
     /* -------------------------------------------------
+   4.5 IMPLIED WORK DETECTION (OPTIONAL PLANNING)
+------------------------------------------------- */
+
+let impliedWork: {
+  implies_work: boolean;
+  estimated_minutes: number | null;
+  deadline: string | null;
+  reason: string;
+} | null = null;
+
+try {
+  const workRes = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    temperature: 0.2,
+    messages: [
+      {
+        role: "system",
+        content: `
+You are Echo Planning.
+
+Your task is to decide whether the drafted email reply implies
+that the user has committed to doing future work.
+
+Rules:
+- Only return true if the reply commits to an action, delivery, review, or follow-up.
+- Do NOT flag acknowledgements, thanks, or FYIs.
+- Estimate realistic focus time, not calendar time.
+- If no deadline is explicit, infer a soft deadline only if clearly implied.
+
+Return JSON only:
+{
+  "implies_work": boolean,
+  "estimated_minutes": number | null,
+  "deadline": string | null,
+  "reason": string
+}
+        `.trim(),
+      },
+      {
+        role: "user",
+        content: `
+Drafted reply:
+${draftJson.body}
+
+Email subject:
+${subject}
+
+Received at:
+${date_received}
+        `.trim(),
+      },
+    ],
+    response_format: { type: "json_object" },
+  });
+
+  impliedWork = JSON.parse(
+    workRes.choices[0].message.content || "{}"
+  );
+} catch (err) {
+  console.error("implied work detection failed:", err);
+}
+
+
+    /* -------------------------------------------------
        5. STORE PREPARED DRAFT (NOT SENT)
     ------------------------------------------------- */
 
@@ -213,6 +277,23 @@ ${decision.draft_intent || "None provided"}
       })
       .select()
       .single();
+
+      /* -------------------------------------------------
+   5.5 STORE SUGGESTED WORK BLOCK (IF ANY)
+------------------------------------------------- */
+
+if (impliedWork?.implies_work) {
+  await supabase.from("suggested_work_blocks").insert({
+    user_id,
+    source: "prepared_draft",
+    source_id: email_record_id,
+    estimated_minutes: impliedWork.estimated_minutes,
+    deadline: impliedWork.deadline,
+    reason: impliedWork.reason,
+    status: "suggested",
+  });
+}
+
 
     /* -------------------------------------------------
        6. RETURN CLEAN RESPONSE

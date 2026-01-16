@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 
 /* ---------------------------------------------------------
@@ -26,7 +26,7 @@ type TimelineItem = {
 type CalendarInsights = {
   workAbility?: number;
   meetingCount?: number;
-  meetingLoadMinutes?: number;
+  meetingMinutes?: number;
   fragments?: number;
   lostFragmentMinutes?: number;
   contextSwitches?: number;
@@ -49,6 +49,14 @@ type Snapshot = {
   aiStory?: string;
 };
 
+type SuggestedWorkBlock = {
+  start: string;
+  end: string;
+  minutes: number;
+  reason: string;
+  source: "draft_commitment";
+};
+
 /* ---------------------------------------------------------
    MAIN COMPONENT
 --------------------------------------------------------- */
@@ -64,6 +72,50 @@ export default function CalendarClient({
     null
   );
   const [defendLoadingKey, setDefendLoadingKey] = useState<string | null>(null);
+
+  const [todayLabel, setTodayLabel] = useState<string>("");
+const [tomorrowLabel, setTomorrowLabel] = useState<string>("");
+
+const tomorrowFlaggedMeetings =
+  tomorrowSnapshot?.flaggedMeetings ?? [];
+
+/* ---------------------------------------------------------
+   CLIENT DATE NORMALISATION (FIXES HYDRATION ERROR)
+--------------------------------------------------------- */
+
+useEffect(() => {
+  if (snapshot?.date) {
+    setTodayLabel(
+      new Date(snapshot.date + "T00:00:00").toLocaleDateString("en-GB", {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+    );
+  }
+
+  if (tomorrowSnapshot?.date) {
+    setTomorrowLabel(
+      new Date(tomorrowSnapshot.date + "T00:00:00").toLocaleDateString(
+        "en-GB",
+        {
+          weekday: "short",
+          day: "2-digit",
+          month: "short",
+        }
+      )
+    );
+  }
+}, [snapshot?.date, tomorrowSnapshot?.date]);
+
+useEffect(() => {
+  fetch("/api/suggested-work", { cache: "no-store" as any })
+    .then((r) => r.json())
+    .then((d) => setSuggestedBlocks(d.blocks ?? []))
+    .catch(() => setSuggestedBlocks([]));
+}, []);
+
 
   /* ---------------------------------------------------------
      TODAY SNAPSHOT
@@ -87,13 +139,20 @@ export default function CalendarClient({
 
   const workAbility = insights.workAbility ?? 0;
   const meetingCount = insights.meetingCount ?? 0;
-  const meetingMinutes = insights.meetingLoadMinutes ?? 0;
+  const meetingMinutes = Number(insights.meetingMinutes ?? 0);
   const fractures = insights.fragments ?? 0;
   const fractureMinutes = insights.lostFragmentMinutes ?? 0;
   const switches = insights.contextSwitches ?? 0;
   const switchCost = insights.contextSwitchCost ?? 0;
   const deepWork = insights.deepWorkWindows ?? [];
   const followUp = insights.likelyFollowUp ?? [];
+
+  const [suggestedBlocks, setSuggestedBlocks] = useState<any[]>([]);
+
+  /* ---------------------------------------------------------
+   SUGGESTED WORK BLOCK (FROM COMMITMENT)
+--------------------------------------------------------- */
+
 
   const dateLabel = new Date(snapshot.date).toLocaleDateString("en-GB", {
     weekday: "short",
@@ -125,7 +184,13 @@ export default function CalendarClient({
      DEFEND BLOCK HANDLER
   --------------------------------------------------------- */
 
-  async function handleDefendBlock(window: DeepWorkWindow) {
+  async function handleDefendBlock(window: {
+  start: string;
+  end: string;
+  minutes: number;
+  source_id?: string;
+  reason?: string;
+}) {
     const key = `${window.start}-${window.end}`;
     try {
       setDefendLoadingKey(key);
@@ -134,10 +199,12 @@ export default function CalendarClient({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          start: window.start,
-          end: window.end,
-          title: "Deep Work — Protected",
-        }),
+  start: window.start,
+  end: window.end,
+  title: "Deep Work — Protected",
+  source_id: window.source_id,
+  reason: window.reason,
+}),
       });
 
       const json = await res.json().catch(() => ({}));
@@ -148,6 +215,12 @@ export default function CalendarClient({
       }
 
       alert("Deep work window protected in Outlook.");
+
+if (window.source_id) {
+  setSuggestedBlocks((prev) =>
+    prev.filter((b) => b.source_id !== window.source_id)
+  );
+}
     } catch (err) {
       console.error(err);
       alert("Something went wrong.");
@@ -155,6 +228,8 @@ export default function CalendarClient({
       setDefendLoadingKey(null);
     }
   }
+
+  
 
   /* ---------------------------------------------------------
      PREMIUM TOMORROW BANNER (colour-coded)
@@ -204,7 +279,7 @@ export default function CalendarClient({
                 Tomorrow
               </p>
               <h2 className="mt-1 text-sm sm:text-base font-semibold text-slate-50">
-                {tomorrowDateLabel ?? "Tomorrow’s workload"}
+                {tomorrowLabel || "Tomorrow"}
               </h2>
               <p className="mt-1.5 text-xs sm:text-sm text-slate-300 max-w-xl">
                 {tomorrowSnapshot.aiStory ||
@@ -257,7 +332,7 @@ export default function CalendarClient({
               Today
             </p>
             <p className="mt-1 text-sm font-medium text-slate-100">
-              {dateLabel}
+              {todayLabel || "—"}
             </p>
             <p className="mt-2 text-xs text-slate-300">
               <span className="font-semibold text-sky-300">
@@ -361,6 +436,82 @@ export default function CalendarClient({
 
         {/* -------------------------- RIGHT: DEEP WORK + NOISE -------------------------- */}
         <div className="space-y-6">
+            {/* -----------------------------------------------------
+   SUGGESTED WORK BLOCK (OPTIONAL)
+----------------------------------------------------- */}
+{suggestedBlocks.length > 0 && (
+  <div className="rounded-3xl border border-sky-500/40 bg-sky-900/10 px-5 py-5">
+    <h2 className="text-xs font-semibold tracking-[0.22em] text-sky-200 uppercase">
+      Echo noticed a commitment
+    </h2>
+
+    <p className="mt-2 text-sm text-slate-200">
+      If you defend a block now, you won’t need to carry this in working memory.
+    </p>
+
+    <div className="mt-4 space-y-4">
+      {suggestedBlocks.map((b) => (
+        <div key={b.id} className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">
+          <p className="text-xs text-slate-400 mb-2">
+            {b.reason || "A drafted reply implies follow-up work."}
+          </p>
+
+          {b.suggested_start && b.suggested_end ? (
+            <>
+              <DeepWorkCard
+                window={{
+                  start: b.suggested_start,
+                  end: b.suggested_end,
+                  minutes: b.minutes,
+                }}
+              />
+
+              <button
+                className="mt-3 text-xs text-sky-300 underline hover:text-sky-200"
+                onClick={() =>
+                  handleDefendBlock({
+                    start: b.suggested_start,
+                    end: b.suggested_end,
+                    minutes: b.minutes,
+                    source_id: b.source_id,
+                    reason: b.reason,
+                  })
+                }
+              >
+                Defend this time
+              </button>
+              <button
+  className="mt-2 block text-[11px] text-slate-400 underline hover:text-slate-300"
+  onClick={async () => {
+    await fetch("/api/dismiss-work-block", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source_id: b.source_id }),
+    });
+
+    // Remove from UI immediately (no reload needed)
+    setSuggestedBlocks((prev) =>
+      prev.filter((x) => x.source_id !== b.source_id)
+    );
+  }}
+>
+  Dismiss suggestion
+</button>
+
+            </>
+
+            
+          ) : (
+            <p className="text-xs text-slate-400">
+              No clean slot found before the deadline — consider moving a meeting or creating space manually.
+            </p>
+          )}
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
           {/* Deep Work */}
           <div className="rounded-3xl border border-emerald-500/40 bg-emerald-900/10 px-5 py-5">
             <h2 className="text-xs font-semibold tracking-[0.22em] text-emerald-200 uppercase">
@@ -408,18 +559,54 @@ export default function CalendarClient({
           {/* Noise & Follow-Up */}
           <div className="rounded-3xl border border-slate-800 bg-slate-950/70 px-5 py-5">
             {/* Meetings That Should Not Exist */}
-            <h3 className="text-[11px] font-semibold tracking-[0.2em] uppercase text-red-300/80 mt-4">
-              Meetings that should not exist (experimental)
-            </h3>
-            <p className="text-xs text-slate-400 mt-1">
-              Flagged where the structural cost outweighs the value.
+            {flaggedMeetings.length > 0 && (
+  <>
+    <h3 className="text-[11px] font-semibold tracking-[0.2em] uppercase text-red-300/80 mt-4">
+      Meetings worth reconsidering
+    </h3>
+
+    <p className="text-xs text-slate-400 mt-1">
+      Flagged where attention cost likely outweighs value.
+    </p>
+
+    <div className="mt-3 space-y-3">
+      {flaggedMeetings.map((m, i) => {
+        const reasons = getMeetingFlagReasons(m, deepWork);
+
+        return (
+          <div
+            key={`${m.start}-${i}`}
+            className="rounded-xl border border-red-500/60 bg-red-900/20 px-4 py-3 text-sm text-red-50/90"
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-medium">
+                {m.title || "Untitled meeting"}
+              </span>
+              <span className="text-[11px] uppercase tracking-[0.18em] text-red-200">
+                Noise {m.noiseScore}
+              </span>
+            </div>
+
+            <p className="text-xs mt-1 text-red-100/80">
+              {formatTime(m.start)} · {m.minutes} min · {m.attendees} attendee(s)
             </p>
 
-            {flaggedMeetings.length === 0 && (
-              <p className="text-sm text-slate-500 mt-2">
-                No low-value meetings today.
-              </p>
-            )}
+            <details className="mt-2 text-xs text-red-100/90">
+              <summary className="cursor-pointer underline">
+                Why Echo flagged this
+              </summary>
+              <ul className="mt-1 list-disc list-inside space-y-0.5">
+                {reasons.map((r, idx) => (
+                  <li key={idx}>{r}</li>
+                ))}
+              </ul>
+            </details>
+          </div>
+        );
+      })}
+    </div>
+  </>
+)}
 
             <div className="mt-3 space-y-3">
               {flaggedMeetings.map((m, i) => {
@@ -525,7 +712,7 @@ export default function CalendarClient({
               <MetricChip
                 label="Meetings"
                 value={`${tomorrowSnapshot.calendarInsights?.meetingCount ?? 0}`}
-                subtitle={`${tomorrowSnapshot.calendarInsights?.meetingLoadMinutes ?? 0} min`}
+                subtitle={`${tomorrowSnapshot.calendarInsights?.meetingMinutes ?? 0} min`}
               />
               <MetricChip
                 label="Fragments"
@@ -547,44 +734,72 @@ export default function CalendarClient({
                   </p>
                 )}
 
-                {tomorrowSnapshot.deepWorkWindows?.map((w: any, i: number) => (
-                  <DeepWorkCard key={i} window={w} />
-                ))}
+                {tomorrowSnapshot.deepWorkWindows?.map((w: any, i: number) => {
+  const defendKey = `tomorrow-${w.start}-${w.end}`;
+  const isLoading = defendLoadingKey === defendKey;
+
+  return (
+    <div key={i} className="space-y-2">
+      <DeepWorkCard window={w} />
+
+      <p className="text-[11px] text-slate-400">
+        Echo predicts this as a high-clarity window based on tomorrow’s meeting
+        load and fragmentation.
+      </p>
+
+      <button
+        className="text-xs text-emerald-300 underline hover:text-emerald-200 disabled:opacity-60"
+        onClick={() =>
+          handleDefendBlock({
+            start: w.start,
+            end: w.end,
+            minutes: w.minutes,
+            source_id: w.source_id,
+            reason: w.reason,
+          })
+        }
+        disabled={isLoading}
+      >
+        {isLoading ? "Defending this block…" : "Defend this block"}
+      </button>
+    </div>
+  );
+})}
               </div>
             </div>
 
-            {/* Flagged Meetings */}
-            <div>
-              <h3 className="text-xs tracking-[0.18em] uppercase text-red-300">
-                Meetings that should not exist
-              </h3>
+            {/* Flagged Meetings */}            
+            {tomorrowFlaggedMeetings.length > 0 && (
+  <div>
+    <h3 className="text-xs tracking-[0.18em] uppercase text-red-300">
+      Meetings worth reconsidering
+    </h3>
 
-              {tomorrowSnapshot.flaggedMeetings?.length === 0 && (
-                <p className="text-sm text-slate-500 mt-2">
-                  No low-value meetings tomorrow.
-                </p>
-              )}
+    <p className="text-xs text-slate-400 mt-1">
+      Based on forecasted attention cost and noise.
+    </p>
 
-              <div className="mt-3 space-y-3">
-                {tomorrowSnapshot.flaggedMeetings?.map((m: any, i: number) => (
-                  <div
-                    key={i}
-                    className="rounded-xl border border-red-500/60 bg-red-900/20 px-4 py-3"
-                  >
-                    <div className="flex justify-between">
-                      <span className="text-red-100">{m.title}</span>
-                      <span className="text-[11px] text-red-200 uppercase">
-                        Noise {m.noiseScore}
-                      </span>
-                    </div>
+    <div className="mt-3 space-y-3">
+      {tomorrowFlaggedMeetings.map((m: any, i: number) => (
+        <div
+          key={i}
+          className="rounded-xl border border-red-500/60 bg-red-900/20 px-4 py-3"
+        >
+          <div className="flex justify-between">
+            <span className="text-red-100">{m.title}</span>
+            <span className="text-[11px] text-red-200 uppercase">
+              Noise {m.noiseScore}
+            </span>
+          </div>
 
-                    <p className="text-xs text-red-200 mt-1">
-                      {m.minutes} min · {m.attendees} attendee(s)
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
+          <p className="text-xs text-red-200 mt-1">
+            {m.minutes} min · {m.attendees} attendee(s)
+          </p>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
 
             {/* Tomorrow Timeline */}
             <div>
@@ -877,6 +1092,9 @@ function renderTodayWorkStory(workAbility: number) {
 
   return "Today is structurally noisy with limited uninterrupted time — small, deliberate wins matter most.";
 }
+
+
+
 
 /* ---------------------------------------------------------
    UTIL

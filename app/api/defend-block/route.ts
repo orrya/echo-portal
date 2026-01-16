@@ -1,6 +1,17 @@
+import { createClient } from "@supabase/supabase-js";
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+
+    const {
+    start,
+    end,
+    title,
+    source_id,      // ← suggested_work_blocks.source_id
+    reason,         // ← human explanation
+}    = body;
+
 
     const webhookUrl = process.env.N8N_PROTECT_BLOCK_WEBHOOK;
     if (!webhookUrl) {
@@ -36,6 +47,30 @@ export async function POST(req: Request) {
     if (!json || typeof json !== "object") {
       json = { status: "success", message: "Focus block protected." };
     }
+
+    /* ---------------------------------------------------------
+   MARK SUGGESTED WORK BLOCK AS DEFENDED
+--------------------------------------------------------- */
+
+if (source_id) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  await supabase
+    .from("suggested_work_blocks")
+    .update({
+      status: "defended",
+      suggested_start: start,
+      suggested_end: end,
+      defended_at: new Date().toISOString(),
+      annotation: reason || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("source_id", source_id)
+    .eq("status", "suggested");
+}
 
     return Response.json(json);
   } catch (err) {

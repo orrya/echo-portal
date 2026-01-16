@@ -20,7 +20,11 @@ function getBandForCategory(category: string | null) {
   return "action";
 }
 
-export default async function EmailPage() {
+export default async function EmailPage({
+  searchParams,
+}: {
+  searchParams?: { view?: string };
+}) {
   const user = await getUser();
 
   if (!user) {
@@ -42,6 +46,9 @@ export default async function EmailPage() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
+  /* -------------------------------------------------------
+     EMAIL RECORDS
+  ------------------------------------------------------- */
   const { data: emails } = await supabase
     .from("email_records")
     .select("*")
@@ -50,7 +57,33 @@ export default async function EmailPage() {
 
   const all = emails ?? [];
 
-  // Unresolved for headline counts (match dashboard semantics)
+  const view = searchParams?.view ?? "all";
+
+  /* -------------------------------------------------------
+     PREPARED DRAFTS — ALWAYS FETCH
+  ------------------------------------------------------- */
+  const { data: drafts } = await supabase
+    .from("prepared_email_drafts")
+    .select("email_record_id")
+    .eq("user_id", user.id)
+    .eq("active", true)
+    .not("email_record_id", "is", null);
+
+  const preparedEmailIds = (drafts ?? [])
+    .map((d) => d.email_record_id)
+    .filter(Boolean) as string[];
+
+  /* -------------------------------------------------------
+     FILTER VISIBLE EMAILS (ONLY FOR prepared VIEW)
+  ------------------------------------------------------- */
+  const visibleEmails =
+    view === "prepared"
+      ? all.filter((e) => preparedEmailIds.includes(e.id))
+      : all;
+
+  /* -------------------------------------------------------
+     UNRESOLVED COUNTS (HEADLINE)
+  ------------------------------------------------------- */
   const unresolved = all.filter(
     (e) =>
       !e["Email Status"] ||
@@ -66,6 +99,36 @@ export default async function EmailPage() {
   const noiseUnresolved = unresolved.filter(
     (e) => getBandForCategory(e.Category) === "noise"
   );
+
+  /* -------------------------------------------------------
+     DECISIONS REMOVED — LAST 30 DAYS ONLY ✅
+  ------------------------------------------------------- */
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+  const since = Date.now() - THIRTY_DAYS_MS;
+
+  const decisionsRemoved = all.filter((e) => {
+    const received = e["Date Received"]
+      ? new Date(e["Date Received"]).getTime()
+      : 0;
+
+    return (
+      received >= since &&
+      (preparedEmailIds.includes(e.id) ||
+        Boolean(e.Summary) ||
+        Boolean(e["Action Notes"]))
+    );
+  }).length;
+
+  const startOfToday = new Date();
+startOfToday.setHours(0, 0, 0, 0);
+
+const resolvedToday = all.filter(
+  (e) =>
+    e["Email Status"]?.toLowerCase() === "resolved" &&
+    e["Finish Time"] &&
+    new Date(e["Finish Time"]).getTime() >= startOfToday.getTime()
+).length;
+
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-20 space-y-12">
@@ -100,15 +163,37 @@ export default async function EmailPage() {
           your email signal is being grouped.
         </p>
 
-        <p className="text-xs text-slate-400/90 pt-1">
-          {all.length === 0
-            ? "No email records have been synced to Echo yet."
-            : `${all.length} messages processed · ${actionUnresolved.length} action · ${followUpUnresolved.length} follow-up · ${noiseUnresolved.length} noise`}
-        </p>
+        {all.length === 0 ? (
+  <p className="text-xs text-slate-400/90 pt-1">
+    No email records have been synced to Echo yet.
+  </p>
+) : (
+  <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1 text-xs">
+    <span className="text-slate-300/90">
+      {actionUnresolved.length} action
+    </span>
+
+    <span className="text-slate-400/80">
+      {followUpUnresolved.length} follow-up
+    </span>
+
+    <span className="text-emerald-300">
+      {resolvedToday} resolved today
+    </span>
+
+    <span className="text-sky-300">
+      {decisionsRemoved} decisions removed (30d)
+    </span>
+  </div>
+)}
+
       </div>
 
-      {/* Shell gets the full list; it handles bands, focus mode, etc. */}
-      <EmailClientShell emails={all} />
+      {/* Client shell */}
+      <EmailClientShell
+        emails={visibleEmails}
+        preparedEmailIds={preparedEmailIds}
+      />
     </div>
   );
 }

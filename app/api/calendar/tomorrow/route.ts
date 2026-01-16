@@ -2,11 +2,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-function getTomorrow() {
+function getTomorrowUTC() {
   const d = new Date();
-  d.setDate(d.getDate() + 1);
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().split("T")[0];
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
 }
 
 export async function GET() {
@@ -16,7 +15,7 @@ export async function GET() {
   );
 
   const userId = "75925360-ebf2-4542-a672-2449d2cf84a1";
-  const tomorrow = getTomorrow();
+  const tomorrow = getTomorrowUTC();
 
   const { data } = await supabase
     .from("calendar_snapshots")
@@ -25,7 +24,9 @@ export async function GET() {
     .eq("date", tomorrow)
     .maybeSingle();
 
-  if (!data) return NextResponse.json({ snapshot: null });
+  if (!data) {
+    return NextResponse.json({ snapshot: null });
+  }
 
   return NextResponse.json({
     snapshot: {

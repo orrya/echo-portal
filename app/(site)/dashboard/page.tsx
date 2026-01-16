@@ -41,6 +41,16 @@ type EchoJarRow = {
   persona_summary?: string | null;
 };
 
+type CognitiveStateRow = {
+  primary_focus: string;
+  reason: string;
+  explicit_do_not?: string[] | null;
+  suggested_window?: string | null;
+  confidence?: number | null;
+  pressure_index?: number | null;
+  drivers?: string[] | null;
+};
+
 function parseJsonArray(value: any): string[] {
   if (!value) return [];
   if (Array.isArray(value)) return value.filter((x) => typeof x === "string");
@@ -182,9 +192,7 @@ export default async function DashboardPage() {
 
   const emails = (emailsRaw ?? []) as EmailRecordRow[];
 
-  const unresolvedEmails = emails.filter(
-    (e) => e["Email Status"] !== "Resolved"
-  );
+  const unresolvedEmails = emails.filter((e) => e["Email Status"] !== "Resolved");
 
   const getBand = (c: string | null) => {
     if (!c) return "action";
@@ -228,6 +236,15 @@ export default async function DashboardPage() {
   const isConnected = emails.length > 0;
 
   /* -------------------------------------------------------
+     PREPARED EMAIL DRAFTS (for dashboard surfacing)
+  ------------------------------------------------------- */
+  const { count: preparedDraftCount } = await supabase
+    .from("prepared_email_drafts")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("active", true);
+
+  /* -------------------------------------------------------
      CALENDAR SNAPSHOTS (for Work Story + Tomorrow Outlook)
   ------------------------------------------------------- */
   const { data: calendarRowsRaw } = await supabase
@@ -239,9 +256,7 @@ export default async function DashboardPage() {
 
   const calendarRows = (calendarRowsRaw ?? []) as CalendarSnapshotRow[];
 
-  const todaySnapshot = calendarRows.find((r) =>
-    r.date?.startsWith(todayStr)
-  );
+  const todaySnapshot = calendarRows.find((r) => r.date?.startsWith(todayStr));
   const tomorrowSnapshot = calendarRows.find((r) =>
     r.date?.startsWith(tomorrowStr)
   );
@@ -249,9 +264,7 @@ export default async function DashboardPage() {
   const todayInsights =
     todaySnapshot?.calendarInsights ?? todaySnapshot?.calendar_insights ?? null;
   const todayWorkAbility =
-    typeof todayInsights?.workAbility === "number"
-      ? todayInsights.workAbility
-      : null;
+    typeof todayInsights?.workAbility === "number" ? todayInsights.workAbility : null;
 
   const tomorrowInsights =
     tomorrowSnapshot?.calendarInsights ??
@@ -261,6 +274,30 @@ export default async function DashboardPage() {
     typeof tomorrowInsights?.workAbility === "number"
       ? tomorrowInsights.workAbility
       : null;
+
+  /* -------------------------------------------------------
+     ECHO OPINION (Cognitive State)
+  ------------------------------------------------------- */
+  const { data: cognitiveRow } = await supabase
+    .from("cognitive_state")
+    .select(
+      `
+      primary_focus,
+      reason,
+      explicit_do_not,
+      suggested_window,
+      confidence,
+      pressure_index,
+      drivers,
+      computed_at
+    `
+    )
+    .eq("user_id", user.id)
+    .order("computed_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  const opinion = (cognitiveRow as CognitiveStateRow | null) ?? null;
 
   /* -------------------------------------------------------
      ECHOJAR — PERSONA + PREVIEW
@@ -279,8 +316,7 @@ export default async function DashboardPage() {
       ? {
           label: echoJarRow.persona_label,
           headline:
-            echoJarRow.persona_headline ||
-            "Your day is built for deliberate work.",
+            echoJarRow.persona_headline || "Your day is built for deliberate work.",
           summary:
             echoJarRow.persona_summary ||
             "Echo sees a pattern of deliberate pacing and helpful meeting structure.",
@@ -333,10 +369,10 @@ export default async function DashboardPage() {
             <div className="space-y-3 max-w-xl translate-y-[6px]">
               <h1
                 className="
-                text-white text-3xl sm:text-4xl lg:text-[2.25rem]
-                font-semibold leading-tight
-                drop-shadow-[0_0_16px_rgba(0,0,0,0.45)]
-              "
+                  text-white text-3xl sm:text-4xl lg:text-[2.25rem]
+                  font-semibold leading-tight
+                  drop-shadow-[0_0_16px_rgba(0,0,0,0.45)]
+                "
               >
                 Quiet tools for{" "}
                 <span className="bg-[linear-gradient(120deg,#f9a8ff,#c4b5fd,#38bdf8)] bg-clip-text text-transparent">
@@ -353,15 +389,15 @@ export default async function DashboardPage() {
             <div className="flex flex-col items-end gap-2">
               <div
                 className="
-                flex items-center gap-2
-                rounded-full
-                border border-white/20
-                bg-white/[0.06]
-                px-3 py-1.5
-                text-[11px] sm:text-xs
-                font-medium text-slate-200
-                backdrop-blur-xl
-              "
+                  flex items-center gap-2
+                  rounded-full
+                  border border-white/20
+                  bg-white/[0.06]
+                  px-3 py-1.5
+                  text-[11px] sm:text-xs
+                  font-medium text-slate-200
+                  backdrop-blur-xl
+                "
               >
                 <span
                   className={`h-2 w-2 rounded-full ${
@@ -376,14 +412,14 @@ export default async function DashboardPage() {
               {outstandingActionCount > 0 && (
                 <div
                   className="
-                  inline-flex items-center gap-1
-                  rounded-full
-                  border border-fuchsia-400/30
-                  bg-fuchsia-500/10
-                  px-3 py-1
-                  text-[11px]
-                  text-fuchsia-100
-                "
+                    inline-flex items-center gap-1
+                    rounded-full
+                    border border-fuchsia-400/30
+                    bg-fuchsia-500/10
+                    px-3 py-1
+                    text-[11px]
+                    text-fuchsia-100
+                  "
                 >
                   <Zap size={12} className="opacity-80" />
                   <span>{outstandingActionCount} action threads outstanding</span>
@@ -406,11 +442,78 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* Main grid: left = Summary + Work Story + Persona, right = Email */}
+        {/* Main grid */}
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1.3fr)]">
           {/* LEFT STACK --------------------------------------------------- */}
           <div className="space-y-6">
-            {/* SUMMARY CARD */}
+            {/* 1) ECHO SUGGESTS */}
+            <div
+              className="
+                relative overflow-hidden rounded-2xl backdrop-blur-2xl
+                bg-fuchsia-500/10 border border-fuchsia-400/30
+                shadow-[0_20px_70px_rgba(0,0,0,0.55)]
+                p-6 sm:p-7
+              "
+            >
+              <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(255,255,255,0.05)]" />
+
+              <div className="relative space-y-3">
+                <p className="text-[11px] font-semibold tracking-[0.22em] text-fuchsia-200 uppercase">
+                  Echo suggests
+                </p>
+
+                {opinion ? (
+                  <>
+                    <h3 className="text-lg sm:text-xl font-semibold text-white">
+                      {opinion.primary_focus}
+                    </h3>
+
+                    <p className="text-sm text-slate-200/95 leading-relaxed">
+                      {opinion.reason}
+                    </p>
+
+                    <div className="mt-3 flex flex-wrap gap-4 text-[11px] text-slate-300">
+                      {opinion.suggested_window && (
+                        <span>
+                          Focus window:{" "}
+                          <span className="text-slate-100 font-medium">
+                            {opinion.suggested_window}
+                          </span>
+                        </span>
+                      )}
+
+                      {typeof opinion.confidence === "number" && (
+                        <span>
+                          Confidence:{" "}
+                          <span className="text-slate-100 font-medium">
+                            {opinion.confidence}%
+                          </span>
+                        </span>
+                      )}
+                    </div>
+
+                    {opinion.explicit_do_not?.length ? (
+                      <div className="mt-3">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400 mb-1">
+                          Echo recommends avoiding
+                        </p>
+                        <ul className="list-disc list-inside text-sm text-slate-300">
+                          {opinion.explicit_do_not.slice(0, 3).map((d) => (
+                            <li key={d}>{d}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <p className="text-sm text-slate-400">
+                    Echo is still forming an opinion.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* 2) SUMMARY CARD (unchanged) */}
             <div
               className="
                 relative overflow-hidden rounded-2xl backdrop-blur-2xl
@@ -426,8 +529,7 @@ export default async function DashboardPage() {
                   Summary · Echo AM / PM
                 </p>
                 <p className="text-[11px] text-slate-400">
-                  Powered by your real activity across email, meetings, and
-                  tasks.
+                  Powered by your real activity across email, meetings, and tasks.
                 </p>
 
                 <div className="space-y-2">
@@ -456,8 +558,8 @@ export default async function DashboardPage() {
                     </p>
                   ) : (
                     <p className="text-sm text-slate-200/90">
-                      Echo will generate a calm AM/PM digest once Microsoft 365
-                      is connected.
+                      Echo will generate a calm AM/PM digest once Microsoft 365 is
+                      connected.
                     </p>
                   )}
                 </div>
@@ -532,7 +634,142 @@ export default async function DashboardPage() {
               </div>
             </div>
 
-            {/* TODAY'S WORK STORY (Calendar) */}
+            {/* 3) PERSONA (gold EchoJar card) */}
+            <PersonaCard persona={persona} />
+          </div>
+
+          {/* RIGHT COLUMN -------------------------------------------------- */}
+          <div className="space-y-6">
+            {/* EMAIL CARD (unchanged, same as your original) */}
+            <div
+              className="
+                relative overflow-hidden rounded-2xl backdrop-blur-2xl
+                bg-white/[0.09] border border-white/14 shadow-[0_20px_70px_rgba(0,0,0,0.58)]
+                hover:shadow-[0_24px_90px_rgba(0,0,0,0.7)] transition-all p-6 sm:p-7
+                bg-[linear-gradient(to_bottom,rgba(255,255,255,0.07),rgba(255,255,255,0.02))]
+              "
+            >
+              <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(255,255,255,0.04)]" />
+
+              <div className="relative space-y-4">
+                <p className="text-[11px] font-semibold tracking-[0.22em] text-slate-300/80 uppercase">
+                  Email · Signal bands
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  Powered by Echo’s live classification of your inbox.
+                </p>
+
+                <h2 className="text-xl sm:text-2xl font-semibold text-white">
+                  Email Intelligence
+                </h2>
+
+                <p className="text-sm text-slate-200/90">
+                  Echo classifies messages into action, follow-up, and noise —
+                  only counting threads that still need attention.
+                </p>
+
+                <div className="mt-4 grid gap-2 text-sm text-slate-200/95">
+                  <div className="flex items-center justify-between rounded-xl px-3 py-2 border border-white/10 bg-slate-900/40 shadow-[0_-2px_12px_rgba(244,114,182,0.25)]">
+                    <span className="flex items-center gap-1">
+                      <Zap size={14} className="text-fuchsia-400 opacity-80" />{" "}
+                      Action
+                    </span>
+                    <span className="text-slate-400/90 text-xs">
+                      {outstandingActionCount} threads outstanding
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between rounded-xl px-3 py-2 border border-white/10 bg-slate-900/40 shadow-[0_-2px_12px_rgba(129,140,248,0.26)]">
+                    <span className="flex items-center gap-1">
+                      <Mail size={14} className="text-violet-300 opacity-80" />{" "}
+                      Follow-up
+                    </span>
+                    <span className="text-slate-400/90 text-xs">
+                      {followCount} threads tracking
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between rounded-xl px-3 py-2 border border-white/10 bg-slate-900/40 shadow-[0_-2px_12px_rgba(56,189,248,0.28)]">
+                    <span className="flex items-center gap-1">
+                      <Bell size={14} className="text-sky-300 opacity-80" /> Noise
+                    </span>
+                    <span className="text-slate-400/90 text-xs">
+                      {noiseCount} threads muted
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-5 rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-xs sm:text-[13px] text-slate-200/95">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400/85 mb-1.5">
+                    Today&apos;s key email
+                  </p>
+
+                  {keyEmail ? (
+                    <>
+                      <p className="font-medium line-clamp-2 text-slate-50">
+                        {keyEmail.Subject || "Untitled thread"}
+                      </p>
+
+                      <p className="mt-0.5 text-slate-400/90 line-clamp-1">
+                        {keyEmail.From}
+                      </p>
+
+                      {keyEmail.Summary && (
+                        <p className="mt-1 text-slate-300/90 line-clamp-2">
+                          {keyEmail.Summary}
+                        </p>
+                      )}
+
+                      <p className="mt-2 text-[10px] text-slate-500/90">
+                        Pulled from your Action band · unresolved only.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-slate-400/90">
+                      Once Echo has outstanding action threads, your highest-signal
+                      one will appear here.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {preparedDraftCount && preparedDraftCount > 0 && (
+  <div
+    className="
+      relative overflow-hidden rounded-2xl backdrop-blur-2xl
+      bg-emerald-500/10 border border-emerald-400/30
+      shadow-[0_20px_70px_rgba(0,0,0,0.55)]
+      p-5 sm:p-6
+    "
+  >
+    <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(255,255,255,0.05)]" />
+
+    <div className="relative space-y-2">
+      <p className="text-[11px] font-semibold tracking-[0.22em] text-emerald-200 uppercase">
+        Prepared by Echo
+      </p>
+
+      <p className="text-sm text-slate-200/95">
+        Echo has already prepared{" "}
+        <span className="font-semibold text-white">
+          {preparedDraftCount}
+        </span>{" "}
+        replies for you.
+      </p>
+
+      <a
+        href="/email?view=prepared"
+        className="inline-block text-xs text-emerald-300 underline underline-offset-2"
+      >
+        Review prepared replies →
+      </a>
+    </div>
+  </div>
+)}
+
+
+            {/* TODAY'S WORK STORY (moved here, unchanged) */}
             <div
               className="
                 relative overflow-hidden rounded-2xl backdrop-blur-2xl
@@ -548,8 +785,8 @@ export default async function DashboardPage() {
                   Calendar · Today’s work story
                 </p>
                 <p className="text-[11px] text-slate-400">
-                  Powered by Echo’s calendar model across meetings, gaps, and
-                  context switches.
+                  Powered by Echo’s calendar model across meetings, gaps, and context
+                  switches.
                 </p>
 
                 <h2 className="text-base sm:text-lg font-semibold text-white mt-1">
@@ -570,124 +807,43 @@ export default async function DashboardPage() {
               </div>
             </div>
 
-            {/* TODAY'S PERSONA (gold EchoJar card) */}
-            <PersonaCard persona={persona} />
-          </div>
-
-          {/* RIGHT COLUMN -------------------------------------------------- */}
-          <div
-            className="
-              relative overflow-hidden rounded-2xl backdrop-blur-2xl
-              bg-white/[0.09] border border-white/14 shadow-[0_20px_70px_rgba(0,0,0,0.58)]
-              hover:shadow-[0_24px_90px_rgba(0,0,0,0.7)] transition-all p-6 sm:p-7
-              bg-[linear-gradient(to_bottom,rgba(255,255,255,0.07),rgba(255,255,255,0.02))]
-            "
-          >
-            <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(255,255,255,0.04)]" />
-
-            <div className="relative space-y-4">
-              <p className="text-[11px] font-semibold tracking-[0.22em] text-slate-300/80 uppercase">
-                Email · Signal bands
-              </p>
-              <p className="text-[11px] text-slate-400">
-                Powered by Echo’s live classification of your inbox.
-              </p>
-
-              <h2 className="text-xl sm:text-2xl font-semibold text-white">
-                Email Intelligence
-              </h2>
-
-              <p className="text-sm text-slate-200/90">
-                Echo classifies messages into action, follow-up, and noise —
-                only counting threads that still need attention.
-              </p>
-
-              <div className="mt-4 grid gap-2 text-sm text-slate-200/95">
-                {/* ACTION */}
-                <div className="flex items-center justify-between rounded-xl px-3 py-2 border border-white/10 bg-slate-900/40 shadow-[0_-2px_12px_rgba(244,114,182,0.25)]">
-                  <span className="flex items-center gap-1">
-                    <Zap size={14} className="text-fuchsia-400 opacity-80" />{" "}
-                    Action
-                  </span>
-                  <span className="text-slate-400/90 text-xs">
-                    {outstandingActionCount} threads outstanding
-                  </span>
-                </div>
-
-                {/* FOLLOW UP */}
-                <div className="flex items-center justify-between rounded-xl px-3 py-2 border border-white/10 bg-slate-900/40 shadow-[0_-2px_12px_rgba(129,140,248,0.26)]">
-                  <span className="flex items-center gap-1">
-                    <Mail size={14} className="text-violet-300 opacity-80" />{" "}
-                    Follow-up
-                  </span>
-                  <span className="text-slate-400/90 text-xs">
-                    {followCount} threads tracking
-                  </span>
-                </div>
-
-                {/* NOISE */}
-                <div className="flex items-center justify-between rounded-xl px-3 py-2 border border-white/10 bg-slate-900/40 shadow-[0_-2px_12px_rgba(56,189,248,0.28)]">
-                  <span className="flex items-center gap-1">
-                    <Bell size={14} className="text-sky-300 opacity-80" /> Noise
-                  </span>
-                  <span className="text-slate-400/90 text-xs">
-                    {noiseCount} threads muted
-                  </span>
-                </div>
-              </div>
-
-              {/* KEY EMAIL */}
-              <div className="mt-5 rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-xs sm:text-[13px] text-slate-200/95">
-                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400/85 mb-1.5">
-                  Today&apos;s key email
+            {/* Tomorrow Outlook + EchoJar preview (unchanged) */}
+            <div
+              className="
+                relative overflow-hidden rounded-2xl backdrop-blur-2xl
+                bg-white/[0.09] border border-white/14 shadow-[0_20px_70px_rgba(0,0,0,0.58)]
+                hover:shadow-[0_24px_90px_rgba(0,0,0,0.7)] transition-all p-6 sm:p-7
+                bg-[linear-gradient(to_bottom,rgba(255,255,255,0.07),rgba(255,255,255,0.02))]
+              "
+            >
+              <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(255,255,255,0.04)]" />
+              <div className="relative space-y-4">
+                <p className="text-[11px] font-semibold tracking-[0.22em] text-slate-300/80 uppercase">
+                  Outlook · Tomorrow
                 </p>
 
-                {keyEmail ? (
-                  <>
-                    <p className="font-medium line-clamp-2 text-slate-50">
-                      {keyEmail.Subject || "Untitled thread"}
-                    </p>
-
-                    <p className="mt-0.5 text-slate-400/90 line-clamp-1">
-                      {keyEmail.From}
-                    </p>
-
-                    {keyEmail.Summary && (
-                      <p className="mt-1 text-slate-300/90 line-clamp-2">
-                        {keyEmail.Summary}
-                      </p>
-                    )}
-
-                    <p className="mt-2 text-[10px] text-slate-500/90">
-                      Pulled from your Action band · unresolved only.
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-slate-400/90">
-                    Once Echo has outstanding action threads, your
-                    highest-signal one will appear here.
-                  </p>
-                )}
-              </div>
-
-              {/* Tomorrow Outlook + EchoJar preview (CEO C & D) */}
-              <div className="mt-5 border-t border-white/10 pt-3 space-y-2 text-[11px] text-slate-400">
                 <div className="flex items-center justify-between">
-                  <span className="uppercase tracking-[0.18em] text-slate-400/90">
-                    Tomorrow outlook
-                  </span>
-                  <span className="rounded-full border border-sky-400/50 bg-sky-500/10 px-2.5 py-[2px] text-[10px] text-sky-100">
+                  <span className="text-sm text-slate-200/90">
                     {tomorrowOutlookLabel}
+                    {typeof tomorrowWorkAbility === "number"
+                      ? ` · ${tomorrowWorkAbility}% focus capacity`
+                      : ""}
+                  </span>
+
+                  <span className="rounded-full border border-sky-400/50 bg-sky-500/10 px-2.5 py-[2px] text-[10px] text-sky-100">
+                    Tomorrow
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between gap-3">
-                  <span className="uppercase tracking-[0.18em] text-slate-400/90">
-                    EchoJar
-                  </span>
-                  <p className="text-right text-[11px] text-slate-400">
-                    {echoJarPreviewText}
-                  </p>
+                <div className="border-t border-white/10 pt-3 text-[11px] text-slate-400">
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="uppercase tracking-[0.18em] text-slate-400/90">
+                      EchoJar
+                    </span>
+                    <p className="text-right text-[11px] text-slate-400">
+                      {echoJarPreviewText}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

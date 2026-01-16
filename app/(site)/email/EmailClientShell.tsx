@@ -23,6 +23,7 @@ type BandKey = "action" | "follow_up" | "noise";
 
 interface Props {
   emails: EmailRecord[];
+  preparedEmailIds?: string[];
 }
 
 interface DraftPreview {
@@ -32,7 +33,10 @@ interface DraftPreview {
   webLink: string | null;
 }
 
-export default function EmailClientShell({ emails }: Props) {
+export default function EmailClientShell({
+  emails,
+  preparedEmailIds = [],
+}: Props) {
   const [selectedBand, setSelectedBand] = useState<BandKey | null>(null);
   const [loadingEmailId, setLoadingEmailId] = useState<string | null>(null);
   const [draftPreview, setDraftPreview] = useState<DraftPreview | null>(null);
@@ -40,6 +44,20 @@ export default function EmailClientShell({ emails }: Props) {
 
   // Local mutable copy so we can update "resolved" without reloading
   const [localEmails, setLocalEmails] = useState<EmailRecord[]>(emails);
+
+  const preparedSet = useMemo(
+  () => new Set(preparedEmailIds ?? []),
+  [preparedEmailIds]
+);
+
+  const [showResolved, setShowResolved] = useState(false);
+  const [threadData, setThreadData] = useState<{
+  messages: any[];
+  unsupported: boolean;
+} | null>(null);
+
+  const [threadLoading, setThreadLoading] = useState(false);
+
 
   // Focus mode state
   const [focusMode, setFocusMode] = useState(false);
@@ -104,7 +122,14 @@ export default function EmailClientShell({ emails }: Props) {
   };
 
   const currentEmails =
-    selectedBand === null ? [] : bandMap[selectedBand] ?? [];
+  selectedBand === null
+    ? []
+    : bandMap[selectedBand].filter(
+        (e) =>
+          showResolved ||
+          !e["Email Status"] ||
+          e["Email Status"]?.toLowerCase() !== "resolved"
+      );
 
   // ---- Focus mode timer tick ----
   useEffect(() => {
@@ -150,11 +175,12 @@ export default function EmailClientShell({ emails }: Props) {
   };
 
   const handleSelectBand = (band: BandKey) => {
-    // In focus mode, only allow Action band
-    if (focusMode && band !== "action") return;
-    setSelectedBand((prev) => (prev === band ? null : band));
-    setDraftError(null);
-  };
+  if (focusMode && band !== "action") return;
+
+  setSelectedBand((prev) => (prev === band ? null : band));
+  setShowResolved(false); // 👈 reset per band
+  setDraftError(null);
+};
 
   // ---- Focus session controls ----
   const startFocusSession = (minutes: number) => {
@@ -270,6 +296,8 @@ export default function EmailClientShell({ emails }: Props) {
       setLoadingEmailId(null);
     }
   };
+
+
 
   // ---- Render ----
   return (
@@ -400,20 +428,39 @@ export default function EmailClientShell({ emails }: Props) {
             className="mt-4 rounded-3xl border border-white/10 bg-slate-900/60 backdrop-blur-2xl p-6 sm:p-7 shadow-[0_24px_80px_rgba(0,0,0,0.75)]"
           >
             <div className="flex items-center justify-between gap-4 mb-4">
-              <div>
-                <p className="text-[11px] tracking-[0.22em] text-slate-400/80 font-semibold uppercase">
-                  Focused threads · {bandLabel(selectedBand)}
-                </p>
-                <p className="text-xs text-slate-400/90 mt-1">
-                  {focusMode && selectedBand === "action"
-                    ? "Echo is keeping you in a tight action lane. Work your way down; everything else can wait."
-                    : "Echo is surfacing the most relevant threads in this band. Tap a card to act."}
-                </p>
-              </div>
-              <span className="rounded-full bg-slate-800/80 px-3 py-1 text-[11px] text-slate-300/90 border border-white/10">
-                {currentEmails.length} messages
-              </span>
-            </div>
+  {/* Left: title + description */}
+  <div>
+    <p className="text-[11px] tracking-[0.22em] text-slate-400/80 font-semibold uppercase">
+      Focused threads · {bandLabel(selectedBand)}
+    </p>
+    <p className="text-xs text-slate-400/90 mt-1">
+      {focusMode && selectedBand === "action"
+        ? "Echo is keeping you in a tight action lane. Work your way down; everything else can wait."
+        : "Echo is surfacing the most relevant threads in this band. Tap a card to act."}
+    </p>
+  </div>
+
+  {/* Right: controls (always aligned together) */}
+  <div className="flex items-center gap-3 shrink-0">
+    <button
+      type="button"
+      onClick={() => setShowResolved((v) => !v)}
+      className="
+        rounded-full border border-slate-600/80
+        px-3 py-1 text-[11px] text-slate-300
+        hover:border-slate-400 transition
+      "
+    >
+      {showResolved ? "Hide resolved" : "Show resolved"}
+    </button>
+
+    {selectedBand !== "noise" && (
+      <span className="rounded-full bg-slate-800/80 px-3 py-1 text-[11px] text-slate-300/90 border border-white/10">
+        {currentEmails.length} messages
+      </span>
+    )}
+  </div>
+</div>
 
             {currentEmails.length === 0 ? (
               <div className="signal-card border border-dashed border-slate-600/60 p-4 text-sm text-slate-300/85 rounded-2xl">
@@ -503,82 +550,165 @@ export default function EmailClientShell({ emails }: Props) {
                         {/* Status + actions */}
                         <div className="mt-2 flex flex-wrap items-center gap-2 justify-between">
                           {/* Status chips */}
-                          <div className="flex flex-wrap gap-2 text-[11px] text-slate-400/90">
-                            {resolved ? (
-                              <span className="rounded-full border border-slate-600/80 px-2 py-0.5">
-                                Resolved
-                                {finishDate ? ` · ${finishDate}` : ""}
-                              </span>
-                            ) : (
-                              <span className="rounded-full border border-sky-500/60 px-2 py-0.5 text-sky-300">
-                                Outstanding
-                              </span>
-                            )}
+<div className="flex flex-wrap gap-2 text-[11px] text-slate-400/90">
+  {/* Resolved / Outstanding */}
+  {resolved ? (
+    <span className="rounded-full border border-slate-600/80 px-2 py-0.5">
+      Resolved
+      {finishDate ? ` · ${finishDate}` : ""}
+    </span>
+  ) : (
+    <span className="rounded-full border border-sky-500/60 px-2 py-0.5 text-sky-300">
+      Outstanding
+    </span>
+  )}
 
-                            {email["Email Status"] && !resolved && (
-                              <span className="rounded-full border border-slate-600/80 px-2 py-0.5">
-                                {email["Email Status"]}
-                              </span>
-                            )}
+  {/* Raw email status if present */}
+  {email["Email Status"] && !resolved && (
+    <span className="rounded-full border border-slate-600/80 px-2 py-0.5">
+      {email["Email Status"]}
+    </span>
+  )}
 
-                            <span className="rounded-full border border-slate-700/80 px-2 py-0.5">
-                              Echo-linked · Draftable
-                            </span>
-                          </div>
+  {/* Echo state */}
+{!resolved && preparedSet.has(email.id) ? (
+  <span className="rounded-full border border-emerald-400/60 px-2 py-0.5 text-emerald-300">
+    Prepared by Echo
+  </span>
+) : !resolved ? (
+  <span className="rounded-full border border-slate-700/80 px-2 py-0.5">
+    Echo-linked · Draftable
+  </span>
+) : null}
+</div>
 
                           {/* Buttons */}
                           <div className="flex flex-wrap gap-2">
                             {/* Generate reply */}
-                            <button
-                              type="button"
-                              onClick={() => handleGenerateDraft(email.id)}
-                              disabled={
-                                isLoading || !email["Reply Link"]
-                              }
-                              className="
-                                rounded-full bg-sky-500/90 hover:bg-sky-400
-                                disabled:bg-slate-700 disabled:text-slate-400
-                                text-xs px-3 py-1.5 text-slate-950 font-semibold
-                                shadow-[0_12px_32px_rgba(56,189,248,0.55)]
-                                transition
-                              "
-                            >
-                              {isLoading && loadingEmailId === email.id
-                                ? "Working..."
-                                : "Generate reply"}
-                            </button>
+                            {preparedSet.has(email.id) ? null : (
+  <button
+    type="button"
+    onClick={() => handleGenerateDraft(email.id)}
+    disabled={isLoading || !email["Reply Link"]}
+    className="
+      rounded-full bg-sky-500/90 hover:bg-sky-400
+      disabled:bg-slate-700 disabled:text-slate-400
+      text-xs px-3 py-1.5 text-slate-950 font-semibold
+      shadow-[0_12px_32px_rgba(56,189,248,0.55)]
+      transition
+    "
+  >
+    {isLoading && loadingEmailId === email.id
+      ? "Working..."
+      : "Generate reply"}
+  </button>
+)}
 
                             {/* View thread – future Outlook web link */}
                             <button
-                              type="button"
-                              className="
-                                rounded-full border border-slate-600/80
-                                text-[11px] px-3 py-1.5 text-slate-200/90
-                                hover:border-slate-400/90 transition
-                              "
-                            >
-                              View thread
-                            </button>
+  type="button"
+  onClick={async () => {
+  // No thread_id → predates Echo
+  if (!email.thread_id) {
+    setThreadData({ messages: [], unsupported: true });
+    return;
+  }
+
+  try {
+    setThreadLoading(true);
+
+    const res = await fetch("/api/email-thread", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ emailId: email.id }),
+    });
+
+    const data = await res.json();
+
+    setThreadData({
+      messages: data.messages ?? [],
+      unsupported: Boolean(data.unsupported),
+    });
+  } catch (e) {
+    console.error(e);
+    setThreadData({ messages: [], unsupported: true });
+  } finally {
+    setThreadLoading(false);
+  }
+}}
+  className="
+    rounded-full border border-slate-600/80
+    text-[11px] px-3 py-1.5 text-slate-200/90
+    hover:border-slate-400/90 transition
+  "
+>
+  View thread
+</button>
+
+
+                            {preparedSet.has(email.id) && !resolved && (
+  <button
+    type="button"
+    onClick={async () => {
+      setLoadingEmailId(email.id);
+      try {
+        const res = await fetch("/api/create-draft-from-prepared", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ emailId: email.id }),
+        });
+
+        if (!res.ok) throw new Error("Failed to create draft");
+
+// ✅ optimistically resolve locally (API already resolved server-side)
+setLocalEmails((prev) =>
+  prev.map((e) =>
+    e.id === email.id
+      ? {
+          ...e,
+          "Email Status": "Resolved",
+          "Finish Time": new Date().toISOString(),
+        }
+      : e
+  )
+);
+
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoadingEmailId(null);
+      }
+    }}
+    className="
+      rounded-full bg-emerald-500/90 hover:bg-emerald-400
+      text-xs px-3 py-1.5 text-slate-950 font-semibold
+      shadow-[0_12px_32px_rgba(52,211,153,0.55)]
+      transition
+    "
+  >
+    {loadingEmailId === email.id ? "Sending…" : "Send to Outlook drafts"}
+  </button>
+)}
+
+
 
                             {/* Resolve */}
-                            {!resolved && (
-                              <button
-                                type="button"
-                                onClick={() => resolveEmail(email.id)}
-                                disabled={
-                                  isLoading && loadingEmailId === email.id
-                                }
-                                className="
-                                  rounded-full border border-fuchsia-500/70
-                                  text-[11px] px-3 py-1.5 text-fuchsia-200
-                                  hover:bg-fuchsia-500/15 transition
-                                "
-                              >
-                                {isLoading && loadingEmailId === email.id
-                                  ? "Resolving..."
-                                  : "Resolve"}
-                              </button>
-                            )}
+                            {!resolved && !preparedSet.has(email.id) && (
+  <button
+    type="button"
+    onClick={() => resolveEmail(email.id)}
+    disabled={isLoading && loadingEmailId === email.id}
+    className="
+      rounded-full border border-fuchsia-500/70
+      text-[11px] px-3 py-1.5 text-fuchsia-200
+      hover:bg-fuchsia-500/15 transition
+    "
+  >
+    {isLoading && loadingEmailId === email.id
+      ? "Resolving..."
+      : "Resolve"}
+  </button>
+)}
 
                             {/* Noise-specific action placeholder */}
                             {selectedBand === "noise" && (
@@ -721,17 +851,162 @@ export default function EmailClientShell({ emails }: Props) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Thread viewer modal */}
+    <AnimatePresence>
+      {threadData !== null && (
+        <motion.div
+          className="fixed inset-0 z-40 flex items-center justify-center px-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setThreadData(null)}
+          />
+
+          <motion.div
+            initial={{ y: 16, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 12, opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="
+              relative z-50 max-w-3xl w-full
+              rounded-3xl border border-white/10
+              bg-slate-950/95 backdrop-blur-2xl
+              shadow-[0_28px_90px_rgba(0,0,0,0.85)]
+              p-6
+            "
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-[11px] tracking-[0.22em] text-slate-400 font-semibold uppercase">
+                Conversation history
+              </p>
+              <button
+                onClick={() => setThreadData(null)}
+                className="text-xs text-slate-400 hover:text-slate-100"
+              >
+                ✕
+              </button>
+            </div>
+
+            {threadLoading && (
+  <p className="text-xs text-slate-400/80 mb-3">
+    Fetching conversation…
+  </p>
+)}
+
+
+            {/* Messages */}
+<div className="space-y-4 max-h-[60vh] overflow-auto pr-1">
+  {threadData.unsupported ? (
+    <div className="py-10 text-center text-sm text-slate-400/90">
+      This conversation predates Echo’s threading.
+      <br />
+      Future replies will appear here automatically.
     </div>
-  );
+  ) : threadData.messages.length === 0 ? (
+    <div className="py-10 text-center text-sm text-slate-400/90">
+      No replies yet.
+      <br />
+      New messages in this conversation will appear here.
+    </div>
+  ) : (
+    (() => {
+      let lastGroup: string | null = null;
+
+      const getGroupLabel = (date?: string) => {
+        if (!date) return "Earlier";
+        const d = new Date(date);
+        const now = new Date();
+
+        const isToday =
+          d.toDateString() === now.toDateString();
+
+        const yesterday = new Date();
+        yesterday.setDate(now.getDate() - 1);
+
+        const isYesterday =
+          d.toDateString() === yesterday.toDateString();
+
+        if (isToday) return "Today";
+        if (isYesterday) return "Yesterday";
+        return "Earlier";
+      };
+
+      return threadData.messages.map((m) => {
+        const group = getGroupLabel(m.date);
+        const showGroupHeader = group !== lastGroup;
+        lastGroup = group;
+
+        return (
+          <div key={m.id}>
+            {/* Timeline header */}
+            {showGroupHeader && (
+              <div className="my-3 text-center text-[11px] uppercase tracking-wide text-slate-500">
+                {group}
+              </div>
+            )}
+
+            {/* Message bubble */}
+            <div
+              className={`rounded-xl px-4 py-3 text-sm ${
+                m.isInbound
+                  ? "bg-slate-900/70 text-slate-200"
+                  : "bg-sky-900/60 text-sky-100 ml-6"
+              }`}
+            >
+              {/* From + date */}
+              <p className="text-[11px] text-slate-400 mb-0.5">
+                {m.from} ·{" "}
+                {m.date &&
+                  new Date(m.date).toLocaleString(undefined, {
+                    day: "2-digit",
+                    month: "short",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+              </p>
+
+              {/* Direction label */}
+              <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">
+                {m.isInbound ? "Received" : "Sent"}
+              </p>
+
+              {/* Body */}
+              <p className="leading-relaxed">{m.body}</p>
+            </div>
+          </div>
+        );
+      });
+    })()
+  )}
+</div>
+
+<p className="mt-4 text-[11px] text-slate-400">
+  Read-only · Replies continue in Outlook
+</p>
+
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  </div>
+);
+
+   
 
   // --- Render Band Card with unresolved count ---
   function renderBandCard(band: BandKey, label: string) {
     const unresolvedCount =
-      band === "action"
-        ? actionUnresolved.length
-        : band === "follow_up"
-        ? followUpUnresolved.length
-        : noiseUnresolved.length;
+  band === "action"
+    ? actionUnresolved.length
+    : band === "follow_up"
+    ? followUpUnresolved.length
+    : null;
 
     const title =
       band === "action" ? "Action" : band === "follow_up" ? "Follow-up" : "Noise";
@@ -800,10 +1075,17 @@ export default function EmailClientShell({ emails }: Props) {
                   }
                 `}
               />
-              <span>
-                {unresolvedCount}{" "}
-                {unresolvedCount === 1 ? "outstanding thread" : "outstanding threads"}
-              </span>
+              {band === "noise" ? (
+  <span className="text-slate-400/80">
+    Quietly stored · no action required
+  </span>
+) : (
+  <span>
+  {band === "follow_up"
+    ? `${unresolvedCount} conversation${unresolvedCount === 1 ? "" : "s"} being tracked`
+    : `${unresolvedCount} outstanding thread${unresolvedCount === 1 ? "" : "s"}`}
+</span>
+)}
             </span>
             {focusMode && band !== "action" && (
               <span className="text-[10px] text-slate-400/80">
