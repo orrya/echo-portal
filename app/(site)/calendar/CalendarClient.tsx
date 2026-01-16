@@ -73,6 +73,8 @@ export default function CalendarClient({
   );
   const [defendLoadingKey, setDefendLoadingKey] = useState<string | null>(null);
 
+  const [suggestedBlocks, setSuggestedBlocks] = useState<any[]>([]);
+
   const [todayLabel, setTodayLabel] = useState<string>("");
 const [tomorrowLabel, setTomorrowLabel] = useState<string>("");
 
@@ -147,7 +149,7 @@ useEffect(() => {
   const deepWork = insights.deepWorkWindows ?? [];
   const followUp = insights.likelyFollowUp ?? [];
 
-  const [suggestedBlocks, setSuggestedBlocks] = useState<any[]>([]);
+
 
   /* ---------------------------------------------------------
    SUGGESTED WORK BLOCK (FROM COMMITMENT)
@@ -442,19 +444,26 @@ if (window.source_id) {
 {suggestedBlocks.length > 0 && (
   <div className="rounded-3xl border border-sky-500/40 bg-sky-900/10 px-5 py-5">
     <h2 className="text-xs font-semibold tracking-[0.22em] text-sky-200 uppercase">
-      Echo noticed a commitment
-    </h2>
+  Echo is holding something
+</h2>
 
-    <p className="mt-2 text-sm text-slate-200">
-      If you defend a block now, you won’t need to carry this in working memory.
-    </p>
+<p className="mt-2 text-sm text-slate-300">
+  This can be protected quietly if you want.
+</p>
+
 
     <div className="mt-4 space-y-4">
       {suggestedBlocks.map((b) => (
         <div key={b.id} className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">
-          <p className="text-xs text-slate-400 mb-2">
-            {b.reason || "A drafted reply implies follow-up work."}
-          </p>
+          <details className="mb-2 text-xs text-slate-400">
+  <summary className="cursor-pointer underline">
+    Why Echo held this
+  </summary>
+  <p className="mt-1 text-slate-300/90">
+    {b.reason || "A drafted reply implies follow-up work."}
+  </p>
+</details>
+
 
           {b.suggested_start && b.suggested_end ? (
             <>
@@ -481,7 +490,7 @@ if (window.source_id) {
                 Defend this time
               </button>
               <button
-  className="mt-2 block text-[11px] text-slate-400 underline hover:text-slate-300"
+  className="mt-2 block text-[11px] text-slate-400 hover:text-slate-300"
   onClick={async () => {
     await fetch("/api/dismiss-work-block", {
       method: "POST",
@@ -495,7 +504,7 @@ if (window.source_id) {
     );
   }}
 >
-  Dismiss suggestion
+  Ignore
 </button>
 
             </>
@@ -608,43 +617,6 @@ if (window.source_id) {
   </>
 )}
 
-            <div className="mt-3 space-y-3">
-              {flaggedMeetings.map((m, i) => {
-                const reasons = getMeetingFlagReasons(m, deepWork);
-
-                return (
-                  <div
-                    key={`${m.start}-${i}`}
-                    className="rounded-xl border border-red-500/60 bg-red-900/20 px-4 py-3 text-sm text-red-50/90"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">
-                        {m.title || "Untitled meeting"}
-                      </span>
-                      <span className="text-[11px] uppercase tracking-[0.18em] text-red-200">
-                        Noise {m.noiseScore}
-                      </span>
-                    </div>
-
-                    <p className="text-xs mt-1 text-red-100/80">
-                      {formatTime(m.start)} · {m.minutes} min · {m.attendees}{" "}
-                      attendee(s)
-                    </p>
-
-                    <details className="mt-2 text-xs text-red-100/90">
-                      <summary className="cursor-pointer underline">
-                        Why Echo flagged this
-                      </summary>
-                      <ul className="mt-1 list-disc list-inside space-y-0.5">
-                        {reasons.map((r, idx) => (
-                          <li key={idx}>{r}</li>
-                        ))}
-                      </ul>
-                    </details>
-                  </div>
-                );
-              })}
-            </div>
 
             {/* Follow-Up Heavy (existing behaviour) */}
             {followUp.length > 0 && (

@@ -23,10 +23,14 @@ export async function POST(req: Request) {
     }
 
     const res = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    start,
+    end,
+    title: title || "Deep Work — Protected",
+  }),
+});
 
     let json: any = {};
     try {

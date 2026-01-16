@@ -58,6 +58,9 @@ export default function EmailClientShell({
 
   const [threadLoading, setThreadLoading] = useState(false);
 
+  const [workSuggestionsByEmail, setWorkSuggestionsByEmail] = useState<Record<string, any>>({});
+
+
 
   // Focus mode state
   const [focusMode, setFocusMode] = useState(false);
@@ -690,10 +693,44 @@ setLocalEmails((prev) =>
   </button>
 )}
 
+{!resolved && workSuggestionsByEmail[email.id] && (
+  <button
+    type="button"
+    onClick={async () => {
+      const s = workSuggestionsByEmail[email.id];
+      setLoadingEmailId(email.id);
+
+      try {
+        await fetch("/api/defend-block", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            start: s.suggested_start,
+            end: s.suggested_end,
+            title: "Follow-up work",
+            source_id: email.id,
+            reason: s.reason,
+          }),
+        });
+      } finally {
+        setLoadingEmailId(null);
+      }
+    }}
+    className="
+      rounded-full border border-sky-500/70
+      text-[11px] px-3 py-1.5 text-sky-200
+      hover:bg-sky-500/15 transition
+    "
+  >
+    Protect time
+  </button>
+)}
 
 
-                            {/* Resolve */}
-                            {!resolved && !preparedSet.has(email.id) && (
+
+
+                            {/* Resolve — only for non-prepared items */}
+{!resolved && !preparedSet.has(email.id) && (
   <button
     type="button"
     onClick={() => resolveEmail(email.id)}
@@ -704,9 +741,7 @@ setLocalEmails((prev) =>
       hover:bg-fuchsia-500/15 transition
     "
   >
-    {isLoading && loadingEmailId === email.id
-      ? "Resolving..."
-      : "Resolve"}
+    {isLoading && loadingEmailId === email.id ? "Resolving..." : "Resolve"}
   </button>
 )}
 
