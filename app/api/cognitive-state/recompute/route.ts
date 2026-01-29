@@ -226,19 +226,15 @@ export async function POST(req: Request) {
       resolvedToday,
     };
 
-    await supabase
-  .from("cognitive_state")
-  .upsert(
-    {
-      user_id,
-      primary_focus: COPY[state].instruction,
-      reason: COPY[state].relief,
-      confidence: 0.85,
-      drivers,
-      computed_at: new Date().toISOString(),
-    },
-    { onConflict: "user_id" }
-  );
+    await supabase.from("cognitive_state").insert({
+  user_id,
+  state,
+  drivers,
+  instruction: COPY[state].instruction,
+  relief_statement: COPY[state].relief,
+  confidence: 0.85,
+  updated_at: new Date().toISOString(),
+});
 
 
 

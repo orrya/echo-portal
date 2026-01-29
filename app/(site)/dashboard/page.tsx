@@ -42,13 +42,12 @@ type EchoJarRow = {
 };
 
 type CognitiveStateRow = {
-  primary_focus: string;
-  reason: string;
-  explicit_do_not?: string[] | null;
-  suggested_window?: string | null;
+  state: "clear" | "contained" | "defensive" | "overloaded";
+  instruction: string;
+  relief_statement: string;
   confidence?: number | null;
-  pressure_index?: number | null;
-  drivers?: string[] | null;
+  drivers?: Record<string, any> | null;
+  updated_at?: string;
 };
 
 function parseJsonArray(value: any): string[] {
@@ -192,7 +191,11 @@ export default async function DashboardPage() {
 
   const emails = (emailsRaw ?? []) as EmailRecordRow[];
 
-  const unresolvedEmails = emails.filter((e) => e["Email Status"] !== "Resolved");
+  const unresolvedEmails = emails.filter(
+  (e) =>
+    !e["Email Status"] ||
+    e["Email Status"].toLowerCase() !== "resolved"
+);
 
   const getBand = (c: string | null) => {
     if (!c) return "action";
@@ -287,24 +290,26 @@ const keyEmail =
   /* -------------------------------------------------------
      ECHO OPINION (Cognitive State)
   ------------------------------------------------------- */
+  await fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/cognitive-state/recompute`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ user_id: user.id }),
+});
+  
   const { data: cognitiveRow } = await supabase
-    .from("cognitive_state")
-    .select(
-      `
-      primary_focus,
-      reason,
-      explicit_do_not,
-      suggested_window,
-      confidence,
-      pressure_index,
-      drivers,
-      computed_at
-    `
-    )
-    .eq("user_id", user.id)
-    .order("computed_at", { ascending: false })
-    .limit(1)
-    .single();
+  .from("cognitive_state")
+  .select(`
+    state,
+    drivers,
+    instruction,
+    relief_statement,
+    confidence,
+    updated_at
+  `)
+  .eq("user_id", user.id)
+  .order("updated_at", { ascending: false })
+  .limit(1)
+  .maybeSingle();
 
   const opinion = (cognitiveRow as CognitiveStateRow | null) ?? null;
 
@@ -457,70 +462,47 @@ const keyEmail =
           <div className="space-y-6">
             {/* 1) ECHO SUGGESTS */}
             <div
-              className="
-                relative overflow-hidden rounded-2xl backdrop-blur-2xl
-                bg-fuchsia-500/10 border border-fuchsia-400/30
-                shadow-[0_20px_70px_rgba(0,0,0,0.55)]
-                p-6 sm:p-7
-              "
-            >
-              <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(255,255,255,0.05)]" />
+  className="
+    relative overflow-hidden rounded-2xl backdrop-blur-2xl
+    bg-fuchsia-500/10 border border-fuchsia-400/30
+    shadow-[0_20px_70px_rgba(0,0,0,0.55)]
+    p-6 sm:p-7
+  "
+>
+  <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(255,255,255,0.05)]" />
 
-              <div className="relative space-y-3">
-                <p className="text-[11px] font-semibold tracking-[0.22em] text-fuchsia-200 uppercase">
-                  Echo suggests
-                </p>
+  <div className="relative space-y-3">
+    <p className="text-[11px] font-semibold tracking-[0.22em] text-fuchsia-200 uppercase">
+      Echo suggests
+    </p>
 
-                {opinion ? (
-                  <>
-                    <h3 className="text-lg sm:text-xl font-semibold text-white">
-                      {opinion.primary_focus}
-                    </h3>
+    {opinion ? (
+      <>
+        <h3 className="text-lg sm:text-xl font-semibold text-white capitalize">
+          {opinion.state.replace("_", " ")}
+        </h3>
 
-                    <p className="text-sm text-slate-200/95 leading-relaxed">
-                      {opinion.reason}
-                    </p>
+        <p className="text-sm text-slate-200/95 leading-relaxed">
+          {opinion.instruction}
+        </p>
 
-                    <div className="mt-3 flex flex-wrap gap-4 text-[11px] text-slate-300">
-                      {opinion.suggested_window && (
-                        <span>
-                          Focus window:{" "}
-                          <span className="text-slate-100 font-medium">
-                            {opinion.suggested_window}
-                          </span>
-                        </span>
-                      )}
+        <p className="text-sm text-slate-300/90 leading-relaxed">
+          {opinion.relief_statement}
+        </p>
 
-                      {typeof opinion.confidence === "number" && (
-                        <span>
-                          Confidence:{" "}
-                          <span className="text-slate-100 font-medium">
-                            {opinion.confidence}%
-                          </span>
-                        </span>
-                      )}
-                    </div>
-
-                    {opinion.explicit_do_not?.length ? (
-                      <div className="mt-3">
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400 mb-1">
-                          Echo recommends avoiding
-                        </p>
-                        <ul className="list-disc list-inside text-sm text-slate-300">
-                          {opinion.explicit_do_not.slice(0, 3).map((d) => (
-                            <li key={d}>{d}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                  </>
-                ) : (
-                  <p className="text-sm text-slate-400">
-                    Echo is still forming an opinion.
-                  </p>
-                )}
-              </div>
-            </div>
+        {typeof opinion.confidence === "number" && (
+          <p className="mt-2 text-[11px] text-slate-400">
+            Confidence · {Math.round(opinion.confidence * 100)}%
+          </p>
+        )}
+      </>
+    ) : (
+      <p className="text-sm text-slate-400">
+        Echo hasn’t assessed the current load yet.
+      </p>
+    )}
+  </div>
+</div>
 
             {/* 2) SUMMARY CARD (unchanged) */}
             <div
