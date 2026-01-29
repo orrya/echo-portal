@@ -223,15 +223,24 @@ export default async function DashboardPage() {
   const followCount = unresolvedFollow.length;
   const noiseCount = unresolvedNoise.length;
 
-  const keyEmail =
-    unresolvedAction
-      .filter((e) => !!e["Date Received"])
-      .slice()
-      .sort(
-        (a, b) =>
-          new Date(b["Date Received"] as string).getTime() -
-          new Date(a["Date Received"] as string).getTime()
-      )[0] ?? null;
+  const scoreEmail = (e: any) => {
+  const urgencyScore =
+    e.urgency === "high" ? 3 : e.urgency === "medium" ? 2 : 1;
+
+  const relationshipScore =
+    e.relationshipImpact === "high"
+      ? 3
+      : e.relationshipImpact === "medium"
+      ? 2
+      : 1;
+
+  return urgencyScore * relationshipScore;
+};
+
+const keyEmail =
+  unresolvedAction
+    .slice()
+    .sort((a: any, b: any) => scoreEmail(b) - scoreEmail(a))[0] ?? null;
 
   const isConnected = emails.length > 0;
 
