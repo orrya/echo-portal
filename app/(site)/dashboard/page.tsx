@@ -237,7 +237,18 @@ export default async function DashboardPage() {
       ? 2
       : 1;
 
-  return urgencyScore * relationshipScore;
+  const recencyScore = e["Date Received"]
+    ? Math.max(
+        0,
+        5 -
+          Math.floor(
+            (Date.now() - new Date(e["Date Received"]).getTime()) /
+              (1000 * 60 * 60 * 24)
+          )
+      )
+    : 0;
+
+  return urgencyScore * relationshipScore + recencyScore;
 };
 
 const keyEmail =

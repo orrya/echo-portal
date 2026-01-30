@@ -292,6 +292,18 @@ export async function GET() {
 
   const parts: string[] = [];
 
+  const { data: cognitive } = await supabase
+  .from("cognitive_state")
+  .select("instruction")
+  .eq("user_id", user.id)
+  .order("updated_at", { ascending: false })
+  .limit(1)
+  .maybeSingle();
+
+if (cognitive?.instruction) {
+  parts.push(cognitive.instruction);
+}
+
   if (handledLine) parts.push(handledLine);
   if (meetingLine) parts.push(meetingLine);
 

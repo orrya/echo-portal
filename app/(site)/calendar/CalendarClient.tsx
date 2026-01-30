@@ -453,8 +453,17 @@ if (window.source_id) {
 
 
     <div className="mt-4 space-y-4">
-      {suggestedBlocks.map((b) => (
+      {suggestedBlocks.slice(0, 3).map((b) => (
         <div key={b.id} className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">
+          <p className="text-sm font-medium text-slate-100">
+  {b.source_title || "Follow-up Echo is holding"}
+</p>
+
+{b.source_summary && (
+  <p className="mt-1 text-xs text-slate-400">
+    {b.source_summary}
+  </p>
+)}
           <details className="mb-2 text-xs text-slate-400">
   <summary className="cursor-pointer underline">
     Why Echo held this

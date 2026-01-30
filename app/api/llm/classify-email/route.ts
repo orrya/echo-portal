@@ -277,6 +277,40 @@ ${date_received}
       })
       .select()
       .single();
+/* -------------------------------------------------
+   5.1 DELIVER TO OUTLOOK VIA N8N (AUTO)
+------------------------------------------------- */
+
+try {
+  // Fetch reply link (same as button route)
+  const { data: email } = await supabase
+    .from("email_records")
+    .select('"Reply Link"')
+    .eq("id", email_record_id)
+    .eq("user_id", user_id)
+    .single();
+
+  if (email?.["Reply Link"]) {
+    await fetch("https://orrya.app.n8n.cloud/webhook/echo-prepared-draft", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        replyDraft: draftJson.body,
+        replyLink: email["Reply Link"],
+      }),
+    });
+
+    // Optional but strongly recommended: mark as delivered
+    await supabase
+      .from("prepared_email_drafts")
+      .update({ delivered_to_outlook: true })
+      .eq("id", preparedDraft.id);
+  }
+} catch (err) {
+  // IMPORTANT: swallow errors — preparation succeeded even if delivery fails
+  console.error("Auto-delivery to Outlook failed:", err);
+}
+
 
       /* -------------------------------------------------
    5.5 STORE SUGGESTED WORK BLOCK (IF ANY)
