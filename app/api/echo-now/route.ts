@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getUser } from "@/lib/getUser";
@@ -200,6 +202,8 @@ export async function GET() {
 
   const insights = todaySnap?.calendar_insights ?? {};
   const timeline = (todaySnap?.day_timeline ?? []) as any[];
+  const hasTodaySnapshot = Boolean(todaySnap);
+
 
   const meaningfulMeetings = timeline
     .filter(m => {
@@ -283,12 +287,14 @@ export async function GET() {
      5) ARCHETYPE + NARRATIVE ASSEMBLY
   ------------------------------------------------- */
 
-  const archetype = selectArchetype({
-    meetingMinutes: insights.meetingMinutes ?? 0,
-    workAbility: insights.workAbility ?? 0,
-    hasNoisyMeeting,
-    diffFromYesterday,
-  });
+  const archetype = hasTodaySnapshot
+  ? selectArchetype({
+      meetingMinutes: insights.meetingMinutes ?? 0,
+      workAbility: insights.workAbility ?? 0,
+      hasNoisyMeeting,
+      diffFromYesterday,
+    })
+  : "light-day";
 
   const parts: string[] = [];
 

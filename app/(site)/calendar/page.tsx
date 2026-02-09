@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import CalendarClient from "./CalendarClient";
 
 export default async function CalendarPage() {
