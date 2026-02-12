@@ -824,6 +824,9 @@ export default function EmailClientShell({
 
                                                             {email["Date Received"] && (
                                                                 <div className="text-right text-[10px] text-slate-400">
+                                                                    <div className="text-slate-300/90">
+                                                                        {timeSince(email["Date Received"])}
+                                                                    </div>
                                                                     {new Date(email["Date Received"]).toLocaleDateString(undefined, {
                                                                         day: "2-digit",
                                                                         month: "short",
