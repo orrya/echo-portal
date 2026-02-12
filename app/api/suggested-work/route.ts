@@ -30,9 +30,32 @@ export async function GET() {
     return NextResponse.json({ blocks: [] });
   }
 
+  const sourceIds = blocks
+  .map((b) => b.source_id)
+  .filter(Boolean);
+
+const { data: sourceEmails } = await supabase
+  .from("email_records")
+  .select('id, "Subject", "Summary"')
+  .in("id", sourceIds);
+
+const sourceMap = new Map(
+  (sourceEmails ?? []).map((e) => [
+    e.id,
+    {
+      title: e.Subject,
+      summary: e.Summary,
+    },
+  ])
+);
+
   // 2) get today's snapshot (timeline + deep work windows)
-  const today = new Date();
-  const yyyyMmDd = today.toISOString().slice(0, 10);
+  const now = new Date();
+const yyyyMmDd = new Date(
+  now.getFullYear(),
+  now.getMonth(),
+  now.getDate()
+).toISOString().slice(0, 10);
 
   const { data: snap } = await supabase
     .from("calendar_snapshots")
@@ -78,16 +101,20 @@ export async function GET() {
       }
     }
 
-    enriched.push({
-      id: b.id,
-      source_id: b.source_id,
-      minutes: Number(b.estimated_minutes ?? 30),
-      deadline: b.deadline,
-      reason: b.reason,
-      suggested_start: suggestedStart,
-      suggested_end: suggestedEnd,
-      suggested_reason: suggestedReason,
-    });
+    const source = sourceMap.get(b.source_id);
+
+enriched.push({
+  id: b.id,
+  source_id: b.source_id,
+  source_title: source?.title ?? "Follow-up work",
+  source_summary: source?.summary ?? null,
+  minutes: Number(b.estimated_minutes ?? 30),
+  deadline: b.deadline,
+  reason: b.reason,
+  suggested_start: suggestedStart,
+  suggested_end: suggestedEnd,
+  suggested_reason: suggestedReason,
+});
   }
 
   return NextResponse.json({ blocks: enriched });

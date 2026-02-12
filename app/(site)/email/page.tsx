@@ -62,14 +62,23 @@ export default async function EmailPage({
   /* -------------------------------------------------------
      PREPARED DRAFTS — ALWAYS FETCH
   ------------------------------------------------------- */
-  const { data: drafts } = await supabase
+  const { data: preparedDrafts } = await supabase
     .from("prepared_email_drafts")
-    .select("email_record_id")
+    .select("email_record_id, body")
     .eq("user_id", user.id)
     .eq("active", true)
     .not("email_record_id", "is", null);
 
-  const preparedEmailIds = (drafts ?? [])
+  const draftMap = new Map(
+    (preparedDrafts ?? []).map((d) => [d.email_record_id, d.body])
+  );
+
+  const emailsWithDraft = all.map((e) => ({
+    ...e,
+    draft_body: draftMap.get(e.id) ?? null,
+  }));
+
+  const preparedEmailIds = (preparedDrafts ?? [])
     .map((d) => d.email_record_id)
     .filter(Boolean) as string[];
 
@@ -78,8 +87,8 @@ export default async function EmailPage({
   ------------------------------------------------------- */
   const visibleEmails =
     view === "prepared"
-      ? all.filter((e) => preparedEmailIds.includes(e.id))
-      : all;
+      ? emailsWithDraft.filter((e) => preparedEmailIds.includes(e.id))
+      : emailsWithDraft;
 
   /* -------------------------------------------------------
      UNRESOLVED COUNTS (HEADLINE)

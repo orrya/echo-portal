@@ -44,13 +44,21 @@ export default function EchoNow() {
   return (
     <main
       className={`
-        mx-auto px-6 py-24 space-y-16
+        relative overflow-hidden mx-auto px-6 py-24 space-y-16
         transition-all duration-700 ease-out
         ${density}
       `}
     >
+      {/* Ambient glow field */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 -z-10"
+      >
+        <div className="absolute left-1/2 top-10 h-56 w-56 -translate-x-1/2 rounded-full bg-cyan-300/12 blur-3xl" />
+        <div className="absolute right-10 top-24 h-64 w-64 rounded-full bg-fuchsia-300/10 blur-3xl" />
+      </div>
       {/* Header */}
-      <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
+      <div className="text-xs uppercase tracking-[0.34em] text-slate-300/80">
         Echo · now
       </div>
 
@@ -58,12 +66,14 @@ export default function EchoNow() {
       <div className="min-h-[6rem]">
         <p
           className={`
-            text-2xl leading-relaxed text-slate-100
-            transition-all duration-700 ease-out
+            text-3xl sm:text-4xl leading-[1.35] font-medium
+            bg-gradient-to-b from-white via-sky-100 to-fuchsia-100/85 bg-clip-text text-transparent
+            [text-shadow:0_0_24px_rgba(186,230,253,0.35)]
+            transition-all duration-1000 ease-out
             ${
               ready
-                ? "opacity-100 translate-y-0"
-                : "opacity-0 translate-y-2"
+                ? "opacity-100 translate-y-0 blur-0"
+                : "opacity-0 translate-y-4 blur-[3px]"
             }
           `}
         >

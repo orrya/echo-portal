@@ -50,22 +50,6 @@ type CognitiveStateRow = {
   updated_at?: string;
 };
 
-function parseJsonArray(value: any): string[] {
-  if (!value) return [];
-  if (Array.isArray(value)) return value.filter((x) => typeof x === "string");
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value);
-      if (Array.isArray(parsed)) {
-        return parsed.filter((x) => typeof x === "string");
-      }
-    } catch {
-      return [];
-    }
-  }
-  return [];
-}
-
 function parseMetrics(value: any): {
   emailsReceived?: number | null;
   emailsSent?: number | null;
@@ -166,11 +150,7 @@ export default async function DashboardPage() {
       (r.Mode?.toLowerCase() === "pm" || r.Mode?.toLowerCase() === "evening")
   );
 
-  const nextWindow = new Date().getHours() < 12 ? "8:00 AM" : "5:00 PM";
-
   const latestSummary = summaryRows[0];
-  const latestThemes = latestSummary ? parseJsonArray(latestSummary.themes) : [];
-  const latestWins = latestSummary ? parseJsonArray(latestSummary.wins) : [];
   const latestMetrics = latestSummary ? parseMetrics(latestSummary.metrics) : {};
   const latestReflection = (latestSummary?.reflection || "").trim();
 
@@ -251,8 +231,12 @@ export default async function DashboardPage() {
   return urgencyScore * relationshipScore + recencyScore;
 };
 
+const unresolvedActionToday = unresolvedAction.filter(
+  (e) => e["Date Received"]?.startsWith(todayStr)
+);
+
 const keyEmail =
-  unresolvedAction
+  unresolvedActionToday
     .slice()
     .sort((a: any, b: any) => scoreEmail(b) - scoreEmail(a))[0] ?? null;
 
@@ -261,11 +245,13 @@ const keyEmail =
   /* -------------------------------------------------------
      PREPARED EMAIL DRAFTS (for dashboard surfacing)
   ------------------------------------------------------- */
-  const { count: preparedDraftCount } = await supabase
+  const { count: preparedDraftCountToday } = await supabase
     .from("prepared_email_drafts")
     .select("id", { count: "exact", head: true })
     .eq("user_id", user.id)
-    .eq("active", true);
+    .eq("active", true)
+    .gte("created_at", `${todayStr}T00:00:00.000Z`)
+    .lt("created_at", `${tomorrowStr}T00:00:00.000Z`);
 
   /* -------------------------------------------------------
      CALENDAR SNAPSHOTS (for Work Story + Tomorrow Outlook)
@@ -378,6 +364,17 @@ const keyEmail =
       : "Heavy load";
 
   const tomorrowOutlookLabel = getTomorrowOutlookLabel(tomorrowWorkAbility);
+  const suggestionContext = [
+    outstandingActionCount > 0
+      ? `${outstandingActionCount} action thread${outstandingActionCount === 1 ? "" : "s"} need attention`
+      : "No outstanding action threads",
+    preparedDraftCountToday && preparedDraftCountToday > 0
+      ? `Echo prepared ${preparedDraftCountToday} email${preparedDraftCountToday === 1 ? "" : "s"} today`
+      : "No new prepared drafts today",
+    typeof todayWorkAbility === "number"
+      ? `Focus capacity ${todayWorkAbility}%`
+      : "Focus capacity still forming",
+  ].join(" · ");
 
   return (
     <>
@@ -468,9 +465,9 @@ const keyEmail =
         </div>
 
         {/* Main grid */}
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1.3fr)]">
+        <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1.3fr)]">
           {/* LEFT STACK --------------------------------------------------- */}
-          <div className="space-y-6">
+          <div className="flex h-full flex-col gap-6">
             {/* 1) ECHO SUGGESTS */}
             <div
   className="
@@ -500,6 +497,9 @@ const keyEmail =
         <p className="text-sm text-slate-300/90 leading-relaxed">
           {opinion.relief_statement}
         </p>
+        <p className="text-[11px] text-fuchsia-100/85">
+          {suggestionContext}
+        </p>
 
         {typeof opinion.confidence === "number" && (
           <p className="mt-2 text-[11px] text-slate-400">
@@ -515,7 +515,34 @@ const keyEmail =
   </div>
 </div>
 
-            {/* 2) SUMMARY CARD (unchanged) */}
+            {/* 2) PREPARED BY ECHO (today only) */}
+            <div
+              className="
+                relative overflow-hidden rounded-2xl backdrop-blur-2xl
+                bg-emerald-500/10 border border-emerald-400/30
+                shadow-[0_20px_70px_rgba(0,0,0,0.55)]
+                p-5 sm:p-6
+              "
+            >
+              <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(255,255,255,0.05)]" />
+
+              <div className="relative space-y-2">
+                <p className="text-[11px] font-semibold tracking-[0.22em] text-emerald-200 uppercase">
+                  Prepared by Echo
+                </p>
+
+                <p className="text-sm text-slate-200/95">
+                  Echo prepared{" "}
+                  <span className="font-semibold text-white">
+                    {preparedDraftCountToday ?? 0}
+                  </span>{" "}
+                  email{(preparedDraftCountToday ?? 0) === 1 ? "" : "s"} for you
+                  today.
+                </p>
+              </div>
+            </div>
+
+            {/* 3) SUMMARY CARD */}
             <div
               className="
                 relative overflow-hidden rounded-2xl backdrop-blur-2xl
@@ -567,47 +594,6 @@ const keyEmail =
                 </div>
 
                 <div className="mt-3 grid gap-3 text-sm text-slate-200/95">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-300/90">Status</span>
-                    <span className="rounded-full border border-slate-500/40 bg-slate-900/40 px-2.5 py-1 text-[11px] uppercase tracking-[0.13em]">
-                      {todayAM || todayPM ? "Generated" : "Waiting"}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-300/80">Next window</span>
-                    <span className="text-slate-100/95">{nextWindow}</span>
-                  </div>
-
-                  {latestThemes.length > 0 && (
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      <span className="text-[11px] text-slate-400/90">
-                        Today’s themes
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {latestThemes.slice(0, 3).map((t) => (
-                          <span
-                            key={t}
-                            className="
-                              rounded-full border border-sky-400/60
-                              bg-sky-500/10 px-2.5 py-0.5
-                              text-[11px] text-sky-100
-                            "
-                          >
-                            {t}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {latestWins.length > 0 && (
-                    <p className="text-[11px] text-slate-400/90 pt-1">
-                      Echo’s highlight:{" "}
-                      <span className="text-slate-100">{latestWins[0]}</span>
-                    </p>
-                  )}
-
                   {Object.keys(latestMetrics).length > 0 && (
                     <div className="pt-1 flex flex-wrap gap-2 text-[11px] text-slate-200/90">
                       {latestMetrics.emailsReceived != null && (
@@ -636,12 +622,12 @@ const keyEmail =
               </div>
             </div>
 
-            {/* 3) PERSONA (gold EchoJar card) */}
+            {/* 4) PERSONA (gold EchoJar card) */}
             <PersonaCard persona={persona} />
           </div>
 
           {/* RIGHT COLUMN -------------------------------------------------- */}
-          <div className="space-y-6">
+          <div className="flex h-full flex-col gap-6">
             {/* EMAIL CARD (unchanged, same as your original) */}
             <div
               className="
@@ -723,52 +709,18 @@ const keyEmail =
                       )}
 
                       <p className="mt-2 text-[10px] text-slate-500/90">
-                        Pulled from your Action band · unresolved only.
+                        Pulled from your Action band ? unresolved today only.
                       </p>
                     </>
                   ) : (
                     <p className="text-slate-400/90">
-                      Once Echo has outstanding action threads, your highest-signal
-                      one will appear here.
+                      No action emails were classified for today yet.
                     </p>
                   )}
                 </div>
               </div>
             </div>
 
-            {preparedDraftCount && preparedDraftCount > 0 && (
-  <div
-    className="
-      relative overflow-hidden rounded-2xl backdrop-blur-2xl
-      bg-emerald-500/10 border border-emerald-400/30
-      shadow-[0_20px_70px_rgba(0,0,0,0.55)]
-      p-5 sm:p-6
-    "
-  >
-    <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_22px_rgba(255,255,255,0.05)]" />
-
-    <div className="relative space-y-2">
-      <p className="text-[11px] font-semibold tracking-[0.22em] text-emerald-200 uppercase">
-        Prepared by Echo
-      </p>
-
-      <p className="text-sm text-slate-200/95">
-        Echo has already prepared{" "}
-        <span className="font-semibold text-white">
-          {preparedDraftCount}
-        </span>{" "}
-        replies for you.
-      </p>
-
-      <a
-        href="/email?view=prepared"
-        className="inline-block text-xs text-emerald-300 underline underline-offset-2"
-      >
-        Review prepared replies →
-      </a>
-    </div>
-  </div>
-)}
 
 
             {/* TODAY'S WORK STORY (moved here, unchanged) */}

@@ -190,6 +190,7 @@ useEffect(() => {
   start: string;
   end: string;
   minutes: number;
+  title?: string; 
   source_id?: string;
   reason?: string;
 }) {
@@ -203,7 +204,7 @@ useEffect(() => {
         body: JSON.stringify({
   start: window.start,
   end: window.end,
-  title: "Deep Work — Protected",
+  title: window.title || "Deep Work — Protected",
   source_id: window.source_id,
   reason: window.reason,
 }),
@@ -444,11 +445,11 @@ if (window.source_id) {
 {suggestedBlocks.length > 0 && (
   <div className="rounded-3xl border border-sky-500/40 bg-sky-900/10 px-5 py-5">
     <h2 className="text-xs font-semibold tracking-[0.22em] text-sky-200 uppercase">
-  Echo is holding something
+  Follow-ups Echo is holding
 </h2>
 
 <p className="mt-2 text-sm text-slate-300">
-  This can be protected quietly if you want.
+  These replies imply work Echo is quietly holding for you.
 </p>
 
 
@@ -487,14 +488,17 @@ if (window.source_id) {
               <button
                 className="mt-3 text-xs text-sky-300 underline hover:text-sky-200"
                 onClick={() =>
-                  handleDefendBlock({
-                    start: b.suggested_start,
-                    end: b.suggested_end,
-                    minutes: b.minutes,
-                    source_id: b.source_id,
-                    reason: b.reason,
-                  })
-                }
+  handleDefendBlock({
+    start: b.suggested_start,
+    end: b.suggested_end,
+    minutes: b.minutes,
+    source_id: b.source_id,
+    reason: b.reason,
+    title: b.source_title
+      ? `Follow up: ${b.source_title}`
+      : "Deep Work — Protected",
+  })
+}
               >
                 Defend this time
               </button>
@@ -504,7 +508,7 @@ if (window.source_id) {
     await fetch("/api/dismiss-work-block", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ source_id: b.source_id }),
+      body: JSON.stringify({ id: b.id }),
     });
 
     // Remove from UI immediately (no reload needed)
